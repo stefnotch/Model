@@ -3,6 +3,7 @@ git commit -am "your message goes here"
 git push
 */
 /*global model*/
+
 /*TODO 
 Color tutorial <==
 Matrix inverse
@@ -228,6 +229,7 @@ var MatrixMath = {
   }
 };
 
+var indices;
 //Called by the body
 
 
@@ -260,18 +262,33 @@ function start() {
     uniform sampler2D u_texture;
     
     void main() {
-      //gl_FragColor = vec4(color.x, color.y, color.z, 1);  // white
-      gl_FragColor = texture2D(u_texture, v_textureCoord);
+      gl_FragColor = vec4(v_textureCoord.x, v_textureCoord.y, 0, 1);  // white
+      //gl_FragColor = texture2D(u_texture, v_textureCoord);
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
+
     var stuff = parseJSONFaces(model["faces"]);
-    var texture = createTexture("NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]);
-    
-    
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", texture);
+
+
+    //
+    indices = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+
+
+    // Now send the element array to GL
+
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(stuff[0]), gl.STATIC_DRAW);
+
+    //
+    console.log(stuff[0].length);
+    console.log(vbo.length);
+    objectsToDraw.push(
+      createObjectToDraw(shaderProgram,
+        vbo, ["coordinates"], "u_matrix", ["NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]]));
 
 
 
@@ -322,31 +339,10 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     vaoExt.bindVertexArrayOES(object.vao);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);  
-  });
 
-
-  //gl.disable(gl.CULL_FACE);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-  //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  //gl.enable(gl.BLEND);
-  transparentObjectsToDraw.forEach((object) => {
-    //What shader program
-    gl.useProgram(object.shaderProgram);
-    //What vertices should get used by the GPU
-    //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
-    //Now, let's make our shader able to use the vertices
-    /*object.attributes.forEach((s) =>
-      setAttribute(s));*/
-    //Uniforms such as the matrix
-    gl.uniformMatrix4fv(object.uniforms, false, matrix);
-
-    vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    gl.drawElements(gl.TRIANGLES, object.bufferLength / 3, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
   window.requestAnimationFrame(redraw);
@@ -382,13 +378,14 @@ function loadTexture(textureLocation) {
 function createTexture(textureLocation, textureCoordsAttribute, textureCoords = -1) {
   loadTexture(textureLocation);
   if (textureCoords != -1) {
-    createVBO(textureCoords);
+    createBuffer(textureCoords);
     setAttribute(textureCoordsAttribute);
   }
 }
 
 /**
  * Hacky function to parse some JSON
+ * @return [vertexIndices, vertexNormals, textureCoords]
  */
 function parseJSONFaces(faces) {
   var vertexIndices = [];
@@ -432,10 +429,11 @@ function parseJSONFaces(faces) {
 
   return [vertexIndices, vertexNormals, textureCoords];
 }
+
 /**
  * Creates a VAO
  */
-function createVAO(vertices, attributes, texture) {
+function createVAO(vertices, attributes, textureInfo) {
   if (attributes.constructor != Array) {
     attributes = [attributes];
   }
@@ -444,8 +442,9 @@ function createVAO(vertices, attributes, texture) {
   // Start setting up VAO  
   vaoExt.bindVertexArrayOES(vao);
   //Create a VBO
-  createVBO(vertices);
+  createBuffer(vertices);
 
+  createTexture(textureInfo[0], textureInfo[1], textureInfo[2]);
   attributes.forEach((s) =>
     setAttribute(s));
 
@@ -455,14 +454,14 @@ function createVAO(vertices, attributes, texture) {
 }
 
 /** 
- * Creates and uploads a VBO to the GPU
+ * Creates and uploads a buffer to the GPU
  */
-function createVBO(vertices) {
+function createBuffer(vertices, type = gl.ARRAY_BUFFER) {
   // Copy an array of data points forming a triangle to the
   // graphics hardware
   var buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+  gl.bindBuffer(type, buffer);
+  gl.bufferData(type, new Float32Array(vertices), gl.STATIC_DRAW);
   return buffer;
 }
 
@@ -517,11 +516,11 @@ function setAttribute(attribute) {
   //return positionLocation; //Location of the stuff that is being fed to the shader
 }
 
-function createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
+function createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureInfo) {
   var attributes = [];
-  attributeNames.forEach((s) => attributes.push(gl.getAttribLocation(shaderProgram, attributeNames)));
+  attributeNames.forEach((s) => attributes.push(gl.getAttribLocation(shaderProgram, s)));
 
-  var vao = createVAO(vertices, attributes, textureName, gl.getUniformLocation(shaderProgram, "u_texture"));
+  var vao = createVAO(vertices, attributes, textureInfo);
 
   return {
     shaderProgram: shaderProgram,
@@ -531,14 +530,9 @@ function createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName
   };
 }
 
-function addObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
-  objectsToDraw.push(
-    createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName));
-}
-
-function addTransparentObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
+function addTransparentObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureInfo) {
   transparentObjectsToDraw.push(
-    createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName));
+    createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureInfo));
 }
 /**
  * OMG! C9 rocks!
