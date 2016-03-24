@@ -227,104 +227,6 @@ var MatrixMath = {
     ];
   }
 };
-var PerlinNoise = {
-  //Our noisy noise
-  noise: [],
-  //How large the cells should be (int points)
-  cellSize: 30,
-  possibleVectors: [
-    [1, 1],
-    [-1, 1],
-    [1, -1],
-    [-1, -1],
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1]
-  ],
-  vectors: [],
-  setUp: function(noiseLength) {
-    for (var i = 0; i < noiseLength; i++) {
-      this.noise[i] = new Array(noiseLength);
-    }
-    for (var i = 0; i < Math.ceil(noiseLength / this.cellSize) + 1; i++) {
-      this.vectors[i] = new Array(Math.ceil(noiseLength / this.cellSize) + 1);
-    }
-
-  },
-  perlinNoise: function(noiseLength) {
-    this.setUp(noiseLength);
-    this.genVectors();
-    for (var x = 0; x < noiseLength; x++) {
-      for (var y = 0; y < noiseLength; y++) {
-        this.noise[x][y] = this.point(x, y);
-      }
-    }
-  },
-  point: function(x, y) {
-    //Our location relative to the current cell (0.something)
-    var inCellX = (x % this.cellSize) / this.cellSize;
-    var inCellY = (y % this.cellSize) / this.cellSize;
-    x = Math.floor(x / this.cellSize);
-    y = Math.floor(y / this.cellSize);
-    //Create some random vectors (the gradient vectors)
-    var dotProcucts = [
-      this.dotProduct(this.vectors[x][y], inCellX, inCellY),
-      this.dotProduct(this.vectors[x + 1][y], inCellX - 1, inCellY),
-      this.dotProduct(this.vectors[x][y + 1], inCellX, inCellY - 1),
-      this.dotProduct(this.vectors[x + 1][y + 1], inCellX - 1, inCellY - 1),
-    ];
-
-    //Blend factor?
-    inCellX = this.smoothCurve(inCellX);
-    inCellY = this.smoothCurve(inCellY);
-
-    //Blend the top/bottom corners
-    var interpolatedx1 = this.lerp(dotProcucts[0], dotProcucts[1], inCellX);
-    var interpolatedx2 = this.lerp(dotProcucts[2], dotProcucts[3], inCellX);
-
-    //Blend the blended stuff
-    return this.lerp(interpolatedx1, interpolatedx2, inCellY);
-  },
-  genVectors: function() {
-    for (var i = 0; i < this.vectors.length; i++) {
-      for (var j = 0; j < this.vectors.length; j++) {
-        this.vectors[i][j] = Math.floor(Math.random() * this.possibleVectors.length);
-      }
-    }
-  },
-  smoothCurve: function(value) {
-    return Math.pow(value, 3) * (value * (value * 6 - 15) + 10);
-  },
-  //Linear interpolation
-  lerp: function(a, b, t) {
-    return a + t * (b - a);
-  },
-  dotProduct: function(vecID, x2, y2) {
-    return this.possibleVectors[vecID][0] * x2 + this.possibleVectors[vecID][1] * y2;
-  }
-};
-
-function fractalNoise(size, octaves, deltaFrequency, deltaAmplitude) {
-  var fNoise = [];
-  for (var i = 0; i < size; i++) {
-    fNoise[i] = new Array(size).fill(0);
-  }
-
-  var amplitude = 1;
-  for (var j = 0; j < octaves; j++) {
-    PerlinNoise.perlinNoise(size);
-    for (var x = 0; x < PerlinNoise.noise.length; x++) {
-      for (var y = 0; y < PerlinNoise.noise[x].length; y++) {
-        fNoise[x][y] += PerlinNoise.noise[x][y] * amplitude;
-
-      }
-    }
-    amplitude /= deltaAmplitude;
-    PerlinNoise.cellSize /= deltaFrequency;
-  }
-  return fNoise;
-}
 
 //Called by the body
 
@@ -333,8 +235,6 @@ function start() {
   initCanvas("glcanvas");
 
   //Init WebGL
-  PerlinNoise.cellSize = 100;
-  var noise = fractalNoise(500, 6, 2, 2);
   gl = initWebGL(glcanvas);
 
   if (gl) {
@@ -345,64 +245,37 @@ function start() {
     var vertexShader = createShader(`
     attribute vec4 coordinates;
     uniform mat4 u_matrix; //The Matrix!
-    varying vec4 color;
+    
+    attribute vec2 a_texcoord;
+    varying vec2 v_textureCoord;
+    
     void main(void){
       gl_Position = u_matrix * coordinates;
-      color = coordinates;
+      v_textureCoord = a_texcoord;
     }`, gl.VERTEX_SHADER);
 
     var fragmentShader = createShader(`
     precision mediump float;
-    varying vec4 color;
+    varying vec2 v_textureCoord;
+    uniform sampler2D u_texture;
+    
     void main() {
-      gl_FragColor = vec4(color.x, color.y, color.z, 1);  // white
-
+      //gl_FragColor = vec4(color.x, color.y, color.z, 1);  // white
+      gl_FragColor = texture2D(u_texture, v_textureCoord);
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix");
-
-
-    var water = [];
-    water.push(0, -1, 0);
-    water.push(noise.length, -1, 0);
-    water.push(0, -1, noise.length);
-
-
-    water.push(noise.length, -1, 0);
-    water.push(noise.length, -1, noise.length);
-    water.push(0, -1, noise.length);
-
-
-    //Shaders
-    var waterVertexShader = createShader(`
-    attribute vec4 coordinates;
-    //attribute vec2 textureCoord;
-    uniform mat4 u_matrix; //The Matrix!
-    varying vec2 texturePos;
+    var stuff = parseJSONFaces(model["faces"]);
+    var texture = createTexture("NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]);
     
-    void main(void){
-      gl_Position = u_matrix * coordinates;
-      texturePos = coordinates.xz / ${noise.length}.0;
-    }
-    `, gl.VERTEX_SHADER);
+    
+    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", texture);
 
-    var waterFragmentShader = createShader(`
-    precision mediump float;
-    varying vec2 texturePos;
-    uniform sampler2D u_texture;
-    void main() {
-      vec4 texture = texture2D(u_texture, texturePos);
-      //gl_FragColor = texture;
-      gl_FragColor = vec4(texture.rgb, 1);
-    }`, gl.FRAGMENT_SHADER);
 
-    var waterShaderProgram = createShaderProgram(waterVertexShader, waterFragmentShader);
 
-    addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
+    //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     //loadTexture("https://i.imgur.com/PxWbS.gif");
 
     //loadTexture("waterAni.gif");
@@ -459,7 +332,7 @@ function redraw() {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  gl.enable(gl.BLEND);
+  //gl.enable(gl.BLEND);
   transparentObjectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
@@ -496,9 +369,9 @@ function loadTexture(textureLocation) {
     // Now that the image has loaded make copy it to the texture.
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    /*gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_W, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_W, gl.CLAMP_TO_EDGE);*/
     //Generate some mipmaps!
     gl.generateMipmap(gl.TEXTURE_2D);
   });
@@ -506,10 +379,63 @@ function loadTexture(textureLocation) {
   return texture;
 }
 
+function createTexture(textureLocation, textureCoordsAttribute, textureCoords = -1) {
+  loadTexture(textureLocation);
+  if (textureCoords != -1) {
+    createVBO(textureCoords);
+    setAttribute(textureCoordsAttribute);
+  }
+}
+
+/**
+ * Hacky function to parse some JSON
+ */
+function parseJSONFaces(faces) {
+  var vertexIndices = [];
+  var textureCoords = [];
+  var vertexNormals = [];
+
+  faces.forEach((s, i) => {
+    switch (i % 11) {
+      case 0:
+        if (s != 42) {
+          throw new Error("Not 42");
+        }
+        break;
+      case 1:
+      case 2:
+      case 3:
+        vertexIndices.push(s);
+        break;
+      case 4:
+        if (s != 0) {
+          throw new Error("Not 0");
+        }
+        break
+      case 5:
+      case 6:
+      case 7:
+        textureCoords.push(s);
+        break;
+      case 8:
+      case 9:
+      case 10:
+        vertexNormals.push(s);
+        break;
+
+    }
+    /*if(s == 42 && i%11 == 0){
+      
+    }*/
+
+  });
+
+  return [vertexIndices, vertexNormals, textureCoords];
+}
 /**
  * Creates a VAO
  */
-function createVAO(vertices, attributes, textureName = -1, textureSampler = -1) {
+function createVAO(vertices, attributes, texture) {
   if (attributes.constructor != Array) {
     attributes = [attributes];
   }
@@ -522,14 +448,6 @@ function createVAO(vertices, attributes, textureName = -1, textureSampler = -1) 
 
   attributes.forEach((s) =>
     setAttribute(s));
-
-  console.log(textureName + ":" + textureSampler);
-  if (textureName != -1 && textureSampler != -1) {
-    var texture = loadTexture(textureName);
-    //gl.activeTexture(gl.TEXTURE0);
-    //gl.bindTexture(gl.TEXTURE_2D, texture);
-    //gl.uniform1i(textureSampler, 0);
-  }
 
   vaoExt.bindVertexArrayOES(null);
 
