@@ -2,6 +2,7 @@
 git commit -am "your message goes here"
 git push
 */
+/*global model*/
 /*TODO 
 Color tutorial <==
 Matrix inverse
@@ -339,28 +340,7 @@ function start() {
   if (gl) {
     vaoExt = gl.getExtension("OES_vertex_array_object");
 
-    var vbo = [];
-    var heightScale = 10;
-    var sizeScale = 5;
-    //Array to valid VBO data
-    for (var x = 0; x < noise.length - 1; x++) {
-      for (var z = 0; z < noise.length; z++) {
-        //vbo.push(x / sizeScale, noise[x][z] * heightScale, z / sizeScale);
-        //vbo.push((x + 1) / sizeScale, noise[x + 1][z] * heightScale, z / sizeScale);
-
-        //Order needs to be correct (cullface)
-        vbo.push(x / sizeScale, noise[x][z] * heightScale, z / sizeScale);
-        vbo.push((x + 1) / sizeScale, noise[x + 1][z] * heightScale, z / sizeScale);
-        vbo.push(x / sizeScale, noise[x][z + 1] * heightScale, (z + 1) / sizeScale);
-
-        vbo.push(x / sizeScale, noise[x][z + 1] * heightScale, (z + 1) / sizeScale);
-        vbo.push((x + 1) / sizeScale, noise[x + 1][z] * heightScale, z / sizeScale);
-        vbo.push((x + 1) / sizeScale, noise[x + 1][z + 1] * heightScale, (z + 1) / sizeScale);
-
-      }
-      //Degenerate triangle
-      //vbo.push((x + 1) / sizeScale, noise[x + 1][z] * heightScale, z / sizeScale);
-    }
+    var vbo = model["vertices"];
 
     var vertexShader = createShader(`
     attribute vec4 coordinates;
@@ -375,15 +355,8 @@ function start() {
     precision mediump float;
     varying vec4 color;
     void main() {
-    if(color.y > 7.0) {
-      gl_FragColor = vec4(color.y/10.0, color.y/10.0, color.y/10.0, 1);  // white
-    } else if(color.y > 0.0) {
-      gl_FragColor = vec4(0, color.y/9.0, 0, 1);  // green
-    } else if(color.y >= -1.1){
-      gl_FragColor = vec4(0, 0, 1, 1);  // alpha + blue
-    } else {
-      gl_FragColor = vec4(0, 0, 0.5+color.y/15.0, 1);  // blue
-    }
+      gl_FragColor = vec4(color.x, color.y, color.z, 1);  // white
+
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
@@ -395,13 +368,13 @@ function start() {
 
     var water = [];
     water.push(0, -1, 0);
-    water.push(noise.length / sizeScale, -1, 0);
-    water.push(0, -1, noise.length / sizeScale);
+    water.push(noise.length, -1, 0);
+    water.push(0, -1, noise.length);
 
 
-    water.push(noise.length / sizeScale, -1, 0);
-    water.push(noise.length / sizeScale, -1, noise.length / sizeScale);
-    water.push(0, -1, noise.length / sizeScale);
+    water.push(noise.length, -1, 0);
+    water.push(noise.length, -1, noise.length);
+    water.push(0, -1, noise.length);
 
 
     //Shaders
@@ -413,7 +386,7 @@ function start() {
     
     void main(void){
       gl_Position = u_matrix * coordinates;
-      texturePos = coordinates.xz / ${noise.length / sizeScale}.0;
+      texturePos = coordinates.xz / ${noise.length}.0;
     }
     `, gl.VERTEX_SHADER);
 
@@ -424,12 +397,12 @@ function start() {
     void main() {
       vec4 texture = texture2D(u_texture, texturePos);
       //gl_FragColor = texture;
-      gl_FragColor = vec4(texture.rgb, 0.3);
+      gl_FragColor = vec4(texture.rgb, 1);
     }`, gl.FRAGMENT_SHADER);
 
     var waterShaderProgram = createShaderProgram(waterVertexShader, waterFragmentShader);
 
-    addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "water.jpg");
+    addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     //loadTexture("https://i.imgur.com/PxWbS.gif");
 
     //loadTexture("waterAni.gif");
@@ -445,6 +418,9 @@ function start() {
   }
 }
 
+/**
+ * Draw loop
+ */
 function redraw() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -461,7 +437,7 @@ function redraw() {
 
   gl.disable(gl.BLEND);
   gl.cullFace(gl.FRONT);
-  gl.enable(gl.CULL_FACE);
+  //gl.enable(gl.CULL_FACE);
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
@@ -479,7 +455,7 @@ function redraw() {
   });
 
 
-  gl.disable(gl.CULL_FACE);
+  //gl.disable(gl.CULL_FACE);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -503,6 +479,9 @@ function redraw() {
   window.requestAnimationFrame(redraw);
 }
 
+/**
+ * Loads a texture from a URL
+ */
 function loadTexture(textureLocation) {
   // Create a texture.
   var texture = gl.createTexture();
@@ -517,6 +496,9 @@ function loadTexture(textureLocation) {
     // Now that the image has loaded make copy it to the texture.
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_W, gl.CLAMP_TO_EDGE);
     //Generate some mipmaps!
     gl.generateMipmap(gl.TEXTURE_2D);
   });
@@ -524,6 +506,9 @@ function loadTexture(textureLocation) {
   return texture;
 }
 
+/**
+ * Creates a VAO
+ */
 function createVAO(vertices, attributes, textureName = -1, textureSampler = -1) {
   if (attributes.constructor != Array) {
     attributes = [attributes];
@@ -537,8 +522,8 @@ function createVAO(vertices, attributes, textureName = -1, textureSampler = -1) 
 
   attributes.forEach((s) =>
     setAttribute(s));
-  
-  console.log(textureName +":"+ textureSampler);
+
+  console.log(textureName + ":" + textureSampler);
   if (textureName != -1 && textureSampler != -1) {
     var texture = loadTexture(textureName);
     //gl.activeTexture(gl.TEXTURE0);
@@ -563,7 +548,20 @@ function createVBO(vertices) {
   return buffer;
 }
 
-function createShader(shaderCode, shaderType) {
+/**
+ * Creates a shader and returns it.
+ * Tries to figure out the type if not specified.
+ */
+function createShader(shaderCode, shaderType = -1) {
+  if (shaderType == -1) {
+    //Vertex shader
+    if (shaderCode.indexOf("gl_Position") >= 0) {
+      shaderType = gl.VERTEX_SHADER;
+    }
+    else {
+      shaderType = gl.FRAGMENT_SHADER;
+    }
+  }
   var shader = gl.createShader(shaderType);
   gl.shaderSource(shader, shaderCode);
   gl.compileShader(shader);
@@ -589,7 +587,6 @@ function createShaderProgram(vertexShader, fragmentShader) {
  * Sets the current attribute for a given shader
  */
 function setAttribute(attribute) {
-
   gl.enableVertexAttribArray(attribute);
   var numComponents = 3; // (x, y, z)
   var type = gl.FLOAT;
