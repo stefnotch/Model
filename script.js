@@ -228,6 +228,8 @@ var MatrixMath = {
   }
 };
 
+var indices;
+var indicesLength;
 //Called by the body
 
 
@@ -268,8 +270,9 @@ function start() {
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
     var stuff = parseJSONFaces(model["faces"]);
-
-
+    
+    indices = createIndices(stuff[0]);
+    indicesLength = stuff[0].length;
     addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {name: "NarutoTex.jpg", loc: gl.getAttribLocation(shaderProgram, "a_texcoord"), vertices: stuff[2]});
 
 
@@ -321,8 +324,10 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     vaoExt.bindVertexArrayOES(object.vao);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -332,14 +337,14 @@ function redraw() {
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   //gl.enable(gl.BLEND);
-  transparentObjectsToDraw.forEach((object) => {
+  /*transparentObjectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
     //What vertices should get used by the GPU
     //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
     //Now, let's make our shader able to use the vertices
-    /*object.attributes.forEach((s) =>
-      setAttribute(s));*/
+    //object.attributes.forEach((s) =>
+    //setAttribute(s));
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
 
@@ -347,7 +352,7 @@ function redraw() {
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
-  });
+  });*/
   window.requestAnimationFrame(redraw);
 }
 
@@ -391,8 +396,9 @@ function createTexture(textureLocation, textureCoordsAttribute, textureCoords = 
  */
 function parseJSONFaces(faces) {
   var vertexIndices = [];
-  var textureCoords = [];
   var vertexNormals = [];
+  var textureCoords = [];
+  
 
   faces.forEach((s, i) => {
     switch (i % 11) {
@@ -459,6 +465,15 @@ function createVBO(vertices) {
   var buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+  return buffer;
+}
+
+function createIndices(indices) {
+  // Copy an array of data points forming a triangle to the
+  // graphics hardware
+  var buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
   return buffer;
 }
 
