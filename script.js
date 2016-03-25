@@ -270,7 +270,7 @@ function start() {
     var stuff = parseJSONFaces(model["faces"]);
 
 
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", ["NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]]);
+    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {name: "NarutoTex.jpg", loc: gl.getAttribLocation(shaderProgram, "a_texcoord"), vertices: stuff[2]});
 
 
 
@@ -360,7 +360,7 @@ function loadTexture(textureLocation) {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   // Fill the texture with a 1x1 blue pixel.
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-    new Uint8Array([255, 0, 255, 255]));
+    new Uint8Array([0, 0, 255, 255]));
   // Asynchronously load an image
   var image = new Image();
   image.src = textureLocation;
