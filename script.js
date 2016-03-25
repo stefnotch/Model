@@ -12,12 +12,12 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [0, 0, 0],
+var pos = [14.161260632693985, -58.418515133607805, 13.611538678412106],
   velocity = [0, 0, 0];
 //Rotation
 //var rotation = [0, 0, 0];
-var pitch = 0,
-  yaw = 0;
+var pitch = -15,
+  yaw = -163.0000000000003;
 var scale = 0.05;
 
 var objectsToDraw = [];
@@ -268,10 +268,9 @@ function start() {
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
     var stuff = parseJSONFaces(model["faces"]);
-    var texture = createTexture("NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]);
-    
-    
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", texture);
+
+
+    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", ["NarutoTex.jpg", gl.getAttribLocation(shaderProgram, "a_texcoord"), stuff[2]]);
 
 
 
@@ -424,10 +423,6 @@ function parseJSONFaces(faces) {
         break;
 
     }
-    /*if(s == 42 && i%11 == 0){
-      
-    }*/
-
   });
 
   return [vertexIndices, vertexNormals, textureCoords];
@@ -449,6 +444,7 @@ function createVAO(vertices, attributes, texture) {
   attributes.forEach((s) =>
     setAttribute(s));
 
+  createTexture(texture["name"], texture["loc"], texture["vertices"]);
   vaoExt.bindVertexArrayOES(null);
 
   return vao;
@@ -519,9 +515,9 @@ function setAttribute(attribute) {
 
 function createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
   var attributes = [];
-  attributeNames.forEach((s) => attributes.push(gl.getAttribLocation(shaderProgram, attributeNames)));
+  attributeNames.forEach((s) => attributes.push(gl.getAttribLocation(shaderProgram, s)));
 
-  var vao = createVAO(vertices, attributes, textureName, gl.getUniformLocation(shaderProgram, "u_texture"));
+  var vao = createVAO(vertices, attributes, textureName);
 
   return {
     shaderProgram: shaderProgram,
