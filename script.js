@@ -4,6 +4,8 @@ git push
 */
 /*global model*/
 /*TODO 
+Texture UVs
+Cel Shading
 Color tutorial <==
 Matrix inverse
 http://stackoverflow.com/a/29514445/3492994
@@ -230,6 +232,8 @@ var MatrixMath = {
 
 var indices;
 var indicesLength;
+var celLineShader;
+var celLineShaderMatrixUniform;
 //Called by the body
 
 
@@ -244,6 +248,24 @@ function start() {
 
     var vbo = model["vertices"];
 
+    var celLineVertexShader = createShader(`
+    attribute vec4 coordinates;
+    uniform mat4 u_matrix; //The Matrix!
+    
+    void main(void){
+      gl_Position = u_matrix * coordinates;
+    }`, gl.VERTEX_SHADER);
+
+    var celLineFragmentShader = createShader(`
+    precision mediump float;
+
+    void main() {
+      gl_FragColor = vec4(0,0,0, 1);  // black
+    }`, gl.FRAGMENT_SHADER);
+
+    celLineShader = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+
+    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader, "u_matrix");
     var vertexShader = createShader(`
     attribute vec4 coordinates;
     uniform mat4 u_matrix; //The Matrix!
@@ -270,10 +292,14 @@ function start() {
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
     var stuff = parseJSONFaces(model["faces"]);
-    
+
     indices = createIndices(stuff[0]);
     indicesLength = stuff[0].length;
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {name: "NarutoTex.jpg", loc: gl.getAttribLocation(shaderProgram, "a_texcoord"), vertices: stuff[2]});
+    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {
+      name: "NarutoTex.jpg",
+      loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
+      vertices: stuff[2]
+    });
 
 
 
@@ -286,7 +312,7 @@ function start() {
     // hardware, so we can start drawing
 
     // Clear the drawing surface
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+    gl.clearColor(1.0, 1.0, 1.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
 
     window.requestAnimationFrame(redraw);
@@ -309,9 +335,35 @@ function redraw() {
   var viewMat = MatrixMath.makeInverseCrap(camMat);
 
   var matrix = MatrixMath.multiply(viewMat, MatrixMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
-
   gl.disable(gl.BLEND);
+
   gl.cullFace(gl.FRONT);
+  gl.enable(gl.CULL_FACE);
+
+  objectsToDraw.forEach((object) => {
+    //What shader program
+    gl.useProgram(celLineShader);
+    //What vertices should get used by the GPU
+    //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
+    //Now, let's make our shader able to use the vertices
+    /*object.attributes.forEach((s) =>
+      setAttribute(s));*/
+    //Uniforms such as the matrix
+    gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
+    //vaoExt.bindVertexArrayOES(object.vao);
+    //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+    //Draw the object
+    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    gl.lineWidth(5);
+    gl.drawElements(gl.LINES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    //vaoExt.bindVertexArrayOES(null);  
+  });
+  gl.disable(gl.CULL_FACE);
+
+
+
+
+
   //gl.enable(gl.CULL_FACE);
   objectsToDraw.forEach((object) => {
     //What shader program
@@ -327,13 +379,13 @@ function redraw() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
     //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
 
   //gl.disable(gl.CULL_FACE);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+  //gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   //gl.enable(gl.BLEND);
@@ -398,7 +450,7 @@ function parseJSONFaces(faces) {
   var vertexIndices = [];
   var vertexNormals = [];
   var textureCoords = [];
-  
+
 
   faces.forEach((s, i) => {
     switch (i % 11) {
