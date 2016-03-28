@@ -284,7 +284,7 @@ function start() {
     uniform sampler2D u_texture;
     
     void main() {
-      //gl_FragColor = vec4(color.x, color.y, color.z, 1);  // white
+      //gl_FragColor = vec4(v_textureCoord.x, v_textureCoord.y, 0, 1);
       gl_FragColor = texture2D(u_texture, v_textureCoord);
     }`, gl.FRAGMENT_SHADER);
 
@@ -296,7 +296,7 @@ function start() {
     indices = createIndices(stuff[0]);
     indicesLength = stuff[0].length;
     addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {
-      name: "NarutoTex.jpg",
+      name: "NarutoTex.png",
       loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
       vertices: stuff[2]
     });
@@ -354,8 +354,7 @@ function redraw() {
     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
     //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.lineWidth(5);
-    gl.drawElements(gl.LINES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
   gl.disable(gl.CULL_FACE);
@@ -379,7 +378,7 @@ function redraw() {
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
     //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -439,7 +438,7 @@ function createTexture(textureLocation, textureCoordsAttribute, textureCoords = 
   loadTexture(textureLocation);
   if (textureCoords != -1) {
     createVBO(textureCoords);
-    setAttribute(textureCoordsAttribute);
+    setAttribute(textureCoordsAttribute, 2);
   }
 }
 
@@ -450,7 +449,8 @@ function parseJSONFaces(faces) {
   var vertexIndices = [];
   var vertexNormals = [];
   var textureCoords = [];
-
+  
+  
 
   faces.forEach((s, i) => {
     switch (i % 11) {
@@ -482,8 +482,14 @@ function parseJSONFaces(faces) {
 
     }
   });
+  
+  var uvs = [];
+  for(var i = 0; i<textureCoords.length; i++){
+    uvs.push(model["uvs"][0][textureCoords[i]]);
+  }
+  
+  return [vertexIndices, vertexNormals, uvs];
 
-  return [vertexIndices, vertexNormals, textureCoords];
 }
 /**
  * Creates a VAO
@@ -519,7 +525,9 @@ function createVBO(vertices) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
   return buffer;
 }
-
+/** 
+ * Creates and uploads some indices to the GPU
+ */
 function createIndices(indices) {
   // Copy an array of data points forming a triangle to the
   // graphics hardware
@@ -567,9 +575,9 @@ function createShaderProgram(vertexShader, fragmentShader) {
 /**
  * Sets the current attribute for a given shader
  */
-function setAttribute(attribute) {
+function setAttribute(attribute, numComponents = 3) {
   gl.enableVertexAttribArray(attribute);
-  var numComponents = 3; // (x, y, z)
+  //numComponents (x, y, z)
   var type = gl.FLOAT;
   var normalize = false; // leave the values as they are
   var offset = 0; // start at the beginning of the buffer
