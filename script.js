@@ -3,6 +3,8 @@ git commit -am "your message goes here"
 git push
 */
 /*global model*/
+
+//Uses http://threejs.org/editor/
 /*TODO 
 Texture UVs
 Cel Shading
