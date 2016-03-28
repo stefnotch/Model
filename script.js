@@ -28,6 +28,8 @@ var objectsToDraw = [];
 
 var transparentObjectsToDraw = [];
 
+
+
 var MatrixMath = {
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
@@ -234,6 +236,7 @@ var MatrixMath = {
 
 var celLineShader;
 var celLineShaderMatrixUniform;
+var celLineShaderNormalsLoc;
 //Called by the body
 
 
@@ -249,11 +252,17 @@ function start() {
     var vbo = model["vertices"];
 
     var celLineVertexShader = createShader(`
+    attribute vec3 a_normal;
     attribute vec4 coordinates;
+
     uniform mat4 u_matrix; //The Matrix!
     
     void main(void){
+    if(a_normal.x > 0.0){
+      gl_Position = vec4(42);
+    }else{      
       gl_Position = u_matrix * coordinates;
+    }
     }`, gl.VERTEX_SHADER);
 
     var celLineFragmentShader = createShader(`
@@ -266,6 +275,12 @@ function start() {
     celLineShader = createShaderProgram(celLineVertexShader, celLineFragmentShader);
 
     celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader, "u_matrix");
+
+    celLineShaderNormalsLoc = gl.getAttribLocation(celLineShader, "a_normal");
+
+    var buffer = createVBO(model["normals"]);
+    setAttribute(celLineShaderNormalsLoc);
+
     var vertexShader = createShader(`
     attribute vec4 coordinates;
     uniform mat4 u_matrix; //The Matrix!
@@ -340,41 +355,26 @@ function redraw() {
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(celLineShader);
-    //What vertices should get used by the GPU
-    //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
-    //Now, let's make our shader able to use the vertices
-    /*object.attributes.forEach((s) =>
-      setAttribute(s));*/
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
-    //vaoExt.bindVertexArrayOES(object.vao);
-    //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
+    //Bind VAO
+    vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
   gl.disable(gl.CULL_FACE);
-
-
-
-
 
   //gl.enable(gl.CULL_FACE);
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
-    //What vertices should get used by the GPU
-    //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
-    //Now, let's make our shader able to use the vertices
-    /*object.attributes.forEach((s) =>
-      setAttribute(s));*/
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
+    //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -439,17 +439,6 @@ function createTexture(textureLocation, textureCoordsAttribute, textureCoords = 
 }
 
 /**
- * Hacky function to parse some JSON
- */
-function parseJSONFaces(faces) {
-  var vertexIndices = [];
-  var vertexNormals = [];
-  var textureCoords = [];
-  
-  return [vertexIndices, vertexNormals, model["uvs"]];
-
-}
-/**
  * Creates a VAO
  */
 function createVAO(vertices, attributes, texture) {
@@ -481,17 +470,6 @@ function createVBO(vertices) {
   var buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-  return buffer;
-}
-/** 
- * Creates and uploads some indices to the GPU
- */
-function createIndices(indices) {
-  // Copy an array of data points forming a triangle to the
-  // graphics hardware
-  var buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
   return buffer;
 }
 
@@ -594,7 +572,9 @@ function initCanvas(canvasName) {
   });
 }
 
-//Create WebGL
+/**
+ * Create WebGL
+ */
 function initWebGL(canvas) {
   gl = null;
 
@@ -627,7 +607,7 @@ function initWebGL(canvas) {
 
   return gl;
 }
-//User input
+
 function keyboardHandlerDown(keyboardEvent) {
   var yawRad = MatrixMath.degToRad(yaw);
   var pitchRad = MatrixMath.degToRad(pitch);
