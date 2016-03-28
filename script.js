@@ -4,6 +4,7 @@ git push
 */
 /*global model*/
 /*TODO 
+http://threejs.org/editor/
 Texture UVs
 Cel Shading
 Color tutorial <==
