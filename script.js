@@ -4,7 +4,6 @@ git push
 */
 /*global model*/
 /*TODO 
-http://threejs.org/editor/
 Texture UVs
 Cel Shading
 Color tutorial <==
@@ -231,8 +230,6 @@ var MatrixMath = {
   }
 };
 
-var indices;
-var indicesLength;
 var celLineShader;
 var celLineShaderMatrixUniform;
 //Called by the body
@@ -292,14 +289,11 @@ function start() {
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-    var stuff = parseJSONFaces(model["faces"]);
 
-    indices = createIndices(stuff[0]);
-    indicesLength = stuff[0].length;
     addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {
       name: "NarutoTex.png",
       loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
-      vertices: stuff[2]
+      vertices: model["uvs"]
     });
 
 
@@ -354,8 +348,8 @@ function redraw() {
     //vaoExt.bindVertexArrayOES(object.vao);
     //gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
-    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
   gl.disable(gl.CULL_FACE);
@@ -376,10 +370,9 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     vaoExt.bindVertexArrayOES(object.vao);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indices);
     //Draw the object
-    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //gl.drawElements(gl.TRIANGLES, indicesLength, gl.UNSIGNED_SHORT, 0);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -451,45 +444,7 @@ function parseJSONFaces(faces) {
   var vertexNormals = [];
   var textureCoords = [];
   
-  
-
-  faces.forEach((s, i) => {
-    switch (i % 11) {
-      case 0:
-        if (s != 42) {
-          throw new Error("Not 42");
-        }
-        break;
-      case 1:
-      case 2:
-      case 3:
-        vertexIndices.push(s);
-        break;
-      case 4:
-        if (s != 0) {
-          throw new Error("Not 0");
-        }
-        break
-      case 5:
-      case 6:
-      case 7:
-        textureCoords.push(s);
-        break;
-      case 8:
-      case 9:
-      case 10:
-        vertexNormals.push(s);
-        break;
-
-    }
-  });
-  
-  var uvs = [];
-  for(var i = 0; i<textureCoords.length; i++){
-    uvs.push(model["uvs"][0][textureCoords[i]]);
-  }
-  
-  return [vertexIndices, vertexNormals, uvs];
+  return [vertexIndices, vertexNormals, model["uvs"]];
 
 }
 /**
