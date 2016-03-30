@@ -6,9 +6,8 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-Texture UVs
+Use a uniform for the line width instead of 2 shaders!
 Cel Shading
-Color tutorial <==
 Matrix inverse
 http://stackoverflow.com/a/29514445/3492994
 */
@@ -237,13 +236,9 @@ var MatrixMath = {
 var celLineShader1;
 var celLineShaderMatrixUniform1;
 var celLineShaderNormalsLoc1;
+var celLineShaderWidthUniform;
 
-var celLineShader2;
-var celLineShaderMatrixUniform2;
-var celLineShaderNormalsLoc2;
 //Called by the body
-
-
 function start() {
   initCanvas("glcanvas");
 
@@ -258,12 +253,11 @@ function start() {
     var celLineVertexShader = createShader(`
     attribute vec3 coordinates;
     attribute vec3 a_normal;
-    
+    uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
     
     void main(void){
-      //gl_PointSize = 4.0;
-      gl_Position = u_matrix * vec4(coordinates + a_normal * 1.001, 1);
+      gl_Position = u_matrix * vec4(coordinates + normalize(a_normal) * u_width, 1);
       
     }`, gl.VERTEX_SHADER);
 
@@ -271,7 +265,7 @@ function start() {
     precision mediump float;
 
     void main() {
-      gl_FragColor = vec4(1,0,0, 1);  // black
+      gl_FragColor = vec4(0,0,0, 1);  // black
     }`, gl.FRAGMENT_SHADER);
 
     celLineShader1 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
@@ -279,46 +273,14 @@ function start() {
     celLineShaderNormalsLoc1 = gl.getAttribLocation(celLineShader1, "a_normal");
     
     celLineShaderMatrixUniform1 = gl.getUniformLocation(celLineShader1, "u_matrix");
+    celLineShaderWidthUniform  = gl.getUniformLocation(celLineShader1, "u_width");
     
-    
-    celLineVertexShader = createShader(`
-    attribute vec3 coordinates;
-    attribute vec3 a_normal;
-    
-    uniform mat4 u_matrix; //The Matrix!
-    
-    void main(void){
-      //gl_PointSize = 4.0;
-      gl_Position = u_matrix * vec4(coordinates + a_normal * -1.001, 1);
-    }`, gl.VERTEX_SHADER);
 
-    celLineFragmentShader = createShader(`
-    precision mediump float;
-    void main() {
-     gl_FragColor = vec4(0,0,1, 1);  // black
-      
-    }`, gl.FRAGMENT_SHADER);
-
-    celLineShader2 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
-    
-    celLineShaderNormalsLoc2 = gl.getAttribLocation(celLineShader2, "a_normal");
-    
-    celLineShaderMatrixUniform2 = gl.getUniformLocation(celLineShader2, "u_matrix");
-    
-    
     // Create a buffer for normals.
     var buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
     gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
- 
-    // Set normals.
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
-    
-        var buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.enableVertexAttribArray(celLineShaderNormalsLoc2);
-    gl.vertexAttribPointer(celLineShaderNormalsLoc2, 3, gl.FLOAT, false, 0, 0);
  
     // Set normals.
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
@@ -400,18 +362,12 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
+    gl.uniform1f(celLineShaderWidthUniform, 0.09);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);  
-  });
-  
-  objectsToDraw.forEach((object) => {
-    //What shader program
-    gl.useProgram(celLineShader2);
-    //Uniforms such as the matrix
-    gl.uniformMatrix4fv(celLineShaderMatrixUniform2, false, matrix);
+    gl.uniform1f(celLineShaderWidthUniform, -0.09);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
