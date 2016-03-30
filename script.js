@@ -16,19 +16,19 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [14.161260632693985, -58.418515133607805, 13.611538678412106],
+var pos = [-0.6695563612951321, -6.247855263929647, -32.9644536444527],
   velocity = [0, 0, 0];
 //Rotation
 //var rotation = [0, 0, 0];
-var pitch = -15,
-  yaw = -163.0000000000003;
+var pitch = 15,
+  yaw = 5;
 var scale = 0.05;
 
 var objectsToDraw = [];
 
 var transparentObjectsToDraw = [];
 
-
+var drawDragon = true;
 
 var MatrixMath = {
   degToRad: function(angleInDeg) {
@@ -234,9 +234,13 @@ var MatrixMath = {
   }
 };
 
-var celLineShader;
-var celLineShaderMatrixUniform;
-var celLineShaderNormalsLoc;
+var celLineShader1;
+var celLineShaderMatrixUniform1;
+var celLineShaderNormalsLoc1;
+
+var celLineShader2;
+var celLineShaderMatrixUniform2;
+var celLineShaderNormalsLoc2;
 //Called by the body
 
 
@@ -252,44 +256,83 @@ function start() {
     var vbo = model["vertices"];
 
     var celLineVertexShader = createShader(`
+    attribute vec3 coordinates;
     attribute vec3 a_normal;
-    attribute vec4 coordinates;
-
+    
     uniform mat4 u_matrix; //The Matrix!
     
     void main(void){
-    if(a_normal.x > 0.0){
-      gl_Position = vec4(42);
-    }else{      
-      gl_Position = u_matrix * coordinates;
-    }
+      //gl_PointSize = 4.0;
+      gl_Position = u_matrix * vec4(coordinates + a_normal * 1.001, 1);
+      
     }`, gl.VERTEX_SHADER);
 
     var celLineFragmentShader = createShader(`
     precision mediump float;
 
     void main() {
-      gl_FragColor = vec4(0,0,0, 1);  // black
+      gl_FragColor = vec4(1,0,0, 1);  // black
     }`, gl.FRAGMENT_SHADER);
 
-    celLineShader = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+    celLineShader1 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+    
+    celLineShaderNormalsLoc1 = gl.getAttribLocation(celLineShader1, "a_normal");
+    
+    celLineShaderMatrixUniform1 = gl.getUniformLocation(celLineShader1, "u_matrix");
+    
+    
+    celLineVertexShader = createShader(`
+    attribute vec3 coordinates;
+    attribute vec3 a_normal;
+    
+    uniform mat4 u_matrix; //The Matrix!
+    
+    void main(void){
+      //gl_PointSize = 4.0;
+      gl_Position = u_matrix * vec4(coordinates + a_normal * -1.001, 1);
+    }`, gl.VERTEX_SHADER);
 
-    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader, "u_matrix");
+    celLineFragmentShader = createShader(`
+    precision mediump float;
+    void main() {
+     gl_FragColor = vec4(0,0,1, 1);  // black
+      
+    }`, gl.FRAGMENT_SHADER);
 
-    celLineShaderNormalsLoc = gl.getAttribLocation(celLineShader, "a_normal");
-
-    var buffer = createVBO(model["normals"]);
-    setAttribute(celLineShaderNormalsLoc);
+    celLineShader2 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+    
+    celLineShaderNormalsLoc2 = gl.getAttribLocation(celLineShader2, "a_normal");
+    
+    celLineShaderMatrixUniform2 = gl.getUniformLocation(celLineShader2, "u_matrix");
+    
+    
+    // Create a buffer for normals.
+    var buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
+    gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
+ 
+    // Set normals.
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
+    
+        var buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.enableVertexAttribArray(celLineShaderNormalsLoc2);
+    gl.vertexAttribPointer(celLineShaderNormalsLoc2, 3, gl.FLOAT, false, 0, 0);
+ 
+    // Set normals.
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
 
     var vertexShader = createShader(`
-    attribute vec4 coordinates;
+    attribute vec3 coordinates;
     uniform mat4 u_matrix; //The Matrix!
     
     attribute vec2 a_texcoord;
     varying vec2 v_textureCoord;
     
     void main(void){
-      gl_Position = u_matrix * coordinates;
+    
+      gl_Position = u_matrix * vec4(coordinates, 1);
       v_textureCoord = a_texcoord;
     }`, gl.VERTEX_SHADER);
 
@@ -354,15 +397,26 @@ function redraw() {
 
   objectsToDraw.forEach((object) => {
     //What shader program
-    gl.useProgram(celLineShader);
+    gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
-    gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
+    gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
+  
+  objectsToDraw.forEach((object) => {
+    //What shader program
+    gl.useProgram(celLineShader2);
+    //Uniforms such as the matrix
+    gl.uniformMatrix4fv(celLineShaderMatrixUniform2, false, matrix);
+    //Draw the object
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //vaoExt.bindVertexArrayOES(null);  
+  });
+  
   gl.disable(gl.CULL_FACE);
 
   //gl.enable(gl.CULL_FACE);
@@ -372,8 +426,9 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     //Bind VAO
-    vaoExt.bindVertexArrayOES(object.vao);
+    //vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
+    if(drawDragon)
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
@@ -470,6 +525,8 @@ function createVBO(vertices) {
   var buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+  
+  //gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbinding
   return buffer;
 }
 
@@ -520,7 +577,7 @@ function setAttribute(attribute, numComponents = 3) {
   var stride = 0; // how many bytes to move to the next vertex
   // 0 = use the correct stride for type and numComponents
   gl.vertexAttribPointer(attribute, numComponents, type, normalize, stride, offset);
-
+  //console.trace();
   //return positionLocation; //Location of the stuff that is being fed to the shader
 }
 
@@ -645,6 +702,8 @@ function keyboardHandlerUp(keyboardEvent) {
       case "ArrowRight":
         velocity[2] = 0.00;
         break;*/
+        case "KeyH":
+          drawDragon = !drawDragon;
   }
 }
 
