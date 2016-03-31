@@ -6,7 +6,6 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-Use a uniform for the line width instead of 2 shaders!
 Cel Shading
 Matrix inverse
 http://stackoverflow.com/a/29514445/3492994
@@ -269,50 +268,61 @@ function start() {
     }`, gl.FRAGMENT_SHADER);
 
     celLineShader1 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
-    
+
     celLineShaderNormalsLoc1 = gl.getAttribLocation(celLineShader1, "a_normal");
-    
+
     celLineShaderMatrixUniform1 = gl.getUniformLocation(celLineShader1, "u_matrix");
-    celLineShaderWidthUniform  = gl.getUniformLocation(celLineShader1, "u_width");
-    
+    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader1, "u_width");
+
 
     // Create a buffer for normals.
     var buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
     gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
- 
+
     // Set normals.
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
 
     var vertexShader = createShader(`
     attribute vec3 coordinates;
+    attribute vec3 a_normal;
     uniform mat4 u_matrix; //The Matrix!
     
     attribute vec2 a_texcoord;
     varying vec2 v_textureCoord;
+    varying vec3 v_normal;
     
     void main(void){
-    
-      gl_Position = u_matrix * vec4(coordinates, 1);
+      gl_Position = u_matrix * vec4(coordinates + a_normal*0.0001, 1);
       v_textureCoord = a_texcoord;
+      v_normal = a_normal;
     }`, gl.VERTEX_SHADER);
 
     var fragmentShader = createShader(`
     precision mediump float;
     varying vec2 v_textureCoord;
+    varying vec3 v_normal;
     uniform sampler2D u_texture;
     
     void main() {
+        float  light = dot(v_normal, normalize(vec3(0,0,-1)));
+      if(light <= 1.0/16.0 * 4.0){
+        light = 0.5;
+      }else if(light <= 1.0/16.0 * 8.0){
+        light = 1.0;
+      }else{
+        light = 1.0;
+      }
       //gl_FragColor = vec4(v_textureCoord.x, v_textureCoord.y, 0, 1);
-      gl_FragColor = texture2D(u_texture, v_textureCoord);
+      gl_FragColor = texture2D(u_texture, v_textureCoord) * light;
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
 
-    addObjectToDraw(shaderProgram, vbo, ["coordinates"], "u_matrix", {
+    addObjectToDraw(shaderProgram, {"coordinates":vbo, "a_normal":model["normals"]}, "u_matrix", {
       name: "NarutoTex.png",
       loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
       vertices: model["uvs"]
@@ -362,17 +372,17 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.09);
+    gl.uniform1f(celLineShaderWidthUniform, 0.4);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.uniform1f(celLineShaderWidthUniform, -0.09);
+    gl.uniform1f(celLineShaderWidthUniform, -0.4);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
-  
+
   gl.disable(gl.CULL_FACE);
 
   //gl.enable(gl.CULL_FACE);
@@ -384,8 +394,8 @@ function redraw() {
     //Bind VAO
     //vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
-    if(drawDragon)
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    if (drawDragon)
+      gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -431,11 +441,18 @@ function loadTexture(textureLocation) {
     // Now that the image has loaded make copy it to the texture.
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    /*gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_W, gl.CLAMP_TO_EDGE);*/
-    //Generate some mipmaps!
-    gl.generateMipmap(gl.TEXTURE_2D);
+    if (textureLocation[0] == "1") {
+      // For Crying Out Loud Don't Let OpenGL Use Bi/Trilinear Filtering!
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_1D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    }
+    else {
+      //Generate some mipmaps!
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }
+
+
+
   });
   //setTimeout("", 10000);
   return texture;
@@ -449,29 +466,6 @@ function createTexture(textureLocation, textureCoordsAttribute, textureCoords = 
   }
 }
 
-/**
- * Creates a VAO
- */
-function createVAO(vertices, attributes, texture) {
-  if (attributes.constructor != Array) {
-    attributes = [attributes];
-  }
-  //Create VAO
-  var vao = vaoExt.createVertexArrayOES();
-  // Start setting up VAO  
-  vaoExt.bindVertexArrayOES(vao);
-  //Create a VBO
-  createVBO(vertices);
-
-  attributes.forEach((s) =>
-    setAttribute(s));
-
-  createTexture(texture["name"], texture["loc"], texture["vertices"]);
-  vaoExt.bindVertexArrayOES(null);
-
-  return vao;
-}
-
 /** 
  * Creates and uploads a VBO to the GPU
  */
@@ -481,11 +475,28 @@ function createVBO(vertices) {
   var buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-  
+
   //gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbinding
   return buffer;
 }
+/**
+ * Creates a buffer and attributes
+ * 
+ */
+function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER, numComponents = 3) {
 
+  if (typeof attributeName === 'string') {
+    //TODO Do something about it!
+  }
+
+  var buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+
+  gl.enableVertexAttribArray(attribute);
+  gl.vertexAttribPointer(attribute, numComponents, gl.FLOAT, false, 0, 0);
+
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
+}
 /**
  * Creates a shader and returns it.
  * Tries to figure out the type if not specified.
@@ -536,29 +547,43 @@ function setAttribute(attribute, numComponents = 3) {
   //console.trace();
   //return positionLocation; //Location of the stuff that is being fed to the shader
 }
+/**
+ * Creates an object (VAO) to draw
+ */
+function createObjectToDraw(shaderProgram, attributes, uniformName, texture) {
+  //Create VAO
+  var vao = vaoExt.createVertexArrayOES();
+  // Start setting up VAO  
+  vaoExt.bindVertexArrayOES(vao);
+  //Create a VBO
+  if ("coordinates" in attributes) {
+    createBufferAndAttribute(attributes["coordinates"], gl.getAttribLocation(shaderProgram, "coordinates"));
+  }
 
-function createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
-  var attributes = [];
-  attributeNames.forEach((s) => attributes.push(gl.getAttribLocation(shaderProgram, s)));
-
-  var vao = createVAO(vertices, attributes, textureName);
+  if ("a_normal" in attributes) {
+    createBufferAndAttribute(attributes["a_normal"], gl.getAttribLocation(shaderProgram, "a_normal"));
+  }
+  //TODO support more attributes
+  createTexture(texture["name"], texture["loc"], texture["vertices"]);
+  
+  vaoExt.bindVertexArrayOES(null);
 
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: vertices.length,
+    bufferLength: attributes["coordinates"].length,
     uniforms: gl.getUniformLocation(shaderProgram, uniformName)
   };
 }
 
-function addObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
+function addObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName));
+    createObjectToDraw(shaderProgram, attributes, uniformName, textureName));
 }
 
-function addTransparentObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName) {
+function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
   transparentObjectsToDraw.push(
-    createObjectToDraw(shaderProgram, vertices, attributeNames, uniformName, textureName));
+    createObjectToDraw(shaderProgram, attributes, uniformName, textureName));
 }
 /**
  * OMG! C9 rocks!
@@ -658,8 +683,8 @@ function keyboardHandlerUp(keyboardEvent) {
       case "ArrowRight":
         velocity[2] = 0.00;
         break;*/
-        case "KeyH":
-          drawDragon = !drawDragon;
+    case "KeyH":
+      drawDragon = !drawDragon;
   }
 }
 
