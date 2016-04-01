@@ -306,16 +306,20 @@ function start() {
     uniform sampler2D u_texture;
     
     void main() {
-        float  light = dot(v_normal, normalize(vec3(0,0,-1)));
-      if(light <= 1.0/16.0 * 4.0){
+        float light = dot(v_normal, normalize(vec3(0,0,-1)));
+      /*if(light <= 1.0/16.0 * 4.0){
         light = 0.5;
       }else if(light <= 1.0/16.0 * 8.0){
-        light = 1.0;
+        light = 0.5;
       }else{
-        light = 1.0;
-      }
-      //gl_FragColor = vec4(v_textureCoord.x, v_textureCoord.y, 0, 1);
-      gl_FragColor = texture2D(u_texture, v_textureCoord) * light;
+        light = 0.5;
+      }*/
+      
+      vec3 src = vec3(texture2D(u_texture, v_textureCoord));
+
+      gl_FragColor = vec4((light <= 0.5) ? (2.0 * src.x * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),
+			(light <= 0.5) ? (2.0 * src.y * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),
+			(light <= 0.5) ? (2.0 * src.z * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)), 1);
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
