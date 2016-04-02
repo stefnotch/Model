@@ -6,6 +6,8 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
+Move Shaders somewhere else
+Only pass attributes to GPU once and use in both shaders (how to use multiple shaders)
 Cel Shading
 Matrix inverse
 http://stackoverflow.com/a/29514445/3492994
@@ -14,12 +16,14 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-0.6695563612951321, -6.247855263929647, -32.9644536444527],
+var pos = [-13.74153029749956, 119.80755982476153, -184.15868065037967],
   velocity = [0, 0, 0];
+  //-0.6695563612951321, -6.247855263929647, -32.9644536444527
+  //-13.74153029749956, 119.80755982476153, -184.15868065037967
 //Rotation
 //var rotation = [0, 0, 0];
-var pitch = 15,
-  yaw = 5;
+var pitch = 50,
+  yaw = 0; //15,5
 var scale = 0.05;
 
 var objectsToDraw = [];
@@ -306,20 +310,22 @@ function start() {
     uniform sampler2D u_texture;
     
     void main() {
-        float light = dot(v_normal, normalize(vec3(0,0,-1)));
-      /*if(light <= 1.0/16.0 * 4.0){
+        float light = dot(v_normal, normalize(vec3(0,-1,0)));
+      if(light <= 1.0/16.0 * 2.0){
         light = 0.5;
-      }else if(light <= 1.0/16.0 * 8.0){
-        light = 0.5;
+      }else if(light <= 1.0/16.0 * 7.0){
+        light = 0.4;
       }else{
-        light = 0.5;
-      }*/
+        light = 0.3;
+      }
       
-      vec3 src = vec3(texture2D(u_texture, v_textureCoord));
-
-      gl_FragColor = vec4((light <= 0.5) ? (2.0 * src.x * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),
-			(light <= 0.5) ? (2.0 * src.y * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),
-			(light <= 0.5) ? (2.0 * src.z * light) : (1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)), 1);
+      vec3 src = vec3(1,1,1);//vec3(texture2D(u_texture, v_textureCoord));
+      if(light <= 0.5){
+        gl_FragColor = vec4(src * 2.0 * light,1);
+      }else{
+        gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
+      }
+      
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
@@ -376,12 +382,12 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.4);
+    gl.uniform1f(celLineShaderWidthUniform, 0.03);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.uniform1f(celLineShaderWidthUniform, -0.4);
+    gl.uniform1f(celLineShaderWidthUniform, -0.03);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
