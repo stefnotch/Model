@@ -13,7 +13,7 @@ Change line width based on dist:
      Calc vertex extenders: vertex.xyz - (average between 2 other points).xyz
    
    Loop over all other triangles(Max adjacents per triangle = 3)
-     Check if adjacent AND if the angle is fitting (thresholds)
+     Check if adjacent AND ( if the angle is fitting (thresholds) OR if marked?)
        Add line (2 triangles, backfacing)
 
 
@@ -295,7 +295,7 @@ function start() {
     var buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
-    gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, true, 0, 0);
 
     // Set normals.
     calculateExtendersAndLines();
@@ -398,7 +398,7 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.1);
+    gl.uniform1f(celLineShaderWidthUniform, 0.05);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
