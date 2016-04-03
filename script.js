@@ -6,6 +6,18 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
+Change line width based on dist:
+ Vertex extenders
+ Loop over each triangle
+   Loop over each vertex
+     Calc vertex extenders: vertex.xyz - (average between 2 other points).xyz
+   
+   Loop over all other triangles(Max adjacents per triangle = 3)
+     Check if adjacent AND if the angle is fitting (thresholds)
+       Add line (2 triangles, backfacing)
+
+
+(Normalize using gl.something(,,true,,))
 Move Shaders somewhere else
 Only pass attributes to GPU once and use in both shaders (how to use multiple shaders)
 Cel Shading
@@ -18,8 +30,8 @@ var glcanvas; //Our canvas
 //Translation
 var pos = [-13.74153029749956, 119.80755982476153, -184.15868065037967],
   velocity = [0, 0, 0];
-  //-0.6695563612951321, -6.247855263929647, -32.9644536444527
-  //-13.74153029749956, 119.80755982476153, -184.15868065037967
+//-0.6695563612951321, -6.247855263929647, -32.9644536444527
+//-13.74153029749956, 119.80755982476153, -184.15868065037967
 //Rotation
 //var rotation = [0, 0, 0];
 var pitch = 50,
@@ -255,12 +267,12 @@ function start() {
 
     var celLineVertexShader = createShader(`
     attribute vec3 coordinates;
-    attribute vec3 a_normal;
+    attribute vec3 ext;
     uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
     
     void main(void){
-      gl_Position = u_matrix * vec4(coordinates + normalize(a_normal) * u_width, 1);
+      gl_Position = u_matrix * vec4(coordinates + ext * u_width, 1);
       
     }`, gl.VERTEX_SHADER);
 
@@ -273,7 +285,7 @@ function start() {
 
     celLineShader1 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
 
-    celLineShaderNormalsLoc1 = gl.getAttribLocation(celLineShader1, "a_normal");
+    celLineShaderNormalsLoc1 = gl.getAttribLocation(celLineShader1, "ext");
 
     celLineShaderMatrixUniform1 = gl.getUniformLocation(celLineShader1, "u_matrix");
     celLineShaderWidthUniform = gl.getUniformLocation(celLineShader1, "u_width");
@@ -286,7 +298,8 @@ function start() {
     gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
 
     // Set normals.
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["normals"]), gl.STATIC_DRAW);
+    calculateExtendersAndLines();
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["extenders"]), gl.STATIC_DRAW);
 
     var vertexShader = createShader(`
     attribute vec3 coordinates;
@@ -332,7 +345,10 @@ function start() {
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
 
-    addObjectToDraw(shaderProgram, {"coordinates":vbo, "a_normal":model["normals"]}, "u_matrix", {
+    addObjectToDraw(shaderProgram, {
+      "coordinates": vbo,
+      "a_normal": model["normals"]
+    }, "u_matrix", {
       name: "NarutoTex.png",
       loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
       vertices: model["uvs"]
@@ -382,12 +398,9 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.03);
+    gl.uniform1f(celLineShaderWidthUniform, 0.1);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    gl.uniform1f(celLineShaderWidthUniform, -0.03);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
@@ -545,11 +558,10 @@ function createShaderProgram(vertexShader, fragmentShader) {
 /**
  * Sets the current attribute for a given shader
  */
-function setAttribute(attribute, numComponents = 3) {
+function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize = false) {
   gl.enableVertexAttribArray(attribute);
-  //numComponents (x, y, z)
-  var type = gl.FLOAT;
-  var normalize = false; // leave the values as they are
+  //numComponents: (x, y, z)
+  //normalize: leave the values as they are
   var offset = 0; // start at the beginning of the buffer
   var stride = 0; // how many bytes to move to the next vertex
   // 0 = use the correct stride for type and numComponents
@@ -575,7 +587,7 @@ function createObjectToDraw(shaderProgram, attributes, uniformName, texture) {
   }
   //TODO support more attributes
   createTexture(texture["name"], texture["loc"], texture["vertices"]);
-  
+
   vaoExt.bindVertexArrayOES(null);
 
   return {
@@ -705,4 +717,33 @@ function scrollHandler(scrollEvent) {
 function mouseHandler(mouseEvent) {
   yaw -= mouseEvent.movementX / 10;
   pitch -= mouseEvent.movementY / 10;
+}
+
+
+
+
+function calculateExtendersAndLines() {
+  var ext = [];
+  if (model["extenders"] == undefined) {
+    //Loop over all triangles
+    for (var tri = 0; tri < model["vertices"].length; tri += 9) {
+      //Loop over each vertex
+      for (var vert = 0; vert < 9; vert += 3) {
+        //Average point
+        var avg = [model["vertices"][tri + (vert + 3) % 9] + model["vertices"][tri + (vert + 6) % 9] >> 1,
+          model["vertices"][tri + (vert + 3) % 9 + 1] + model["vertices"][tri + (vert + 6) % 9 + 1] >> 1,
+          model["vertices"][tri + (vert + 3) % 9 + 2] + model["vertices"][tri + (vert + 6) % 9 + 2] >> 1
+        ];
+        ext.push(model["vertices"][tri + vert] - avg[0],
+          model["vertices"][tri + vert + 1] - avg[1],
+          model["vertices"][tri + vert + 2] - avg[2]);
+        //model["vertices"][ind]
+        //model["vertices"][ind + 1]
+        //model["vertices"][ind + 2]
+        //(6 + 3)%9
+        //(6 + 6)%9
+      }
+    }
+  }
+  model["extenders"] = ext;
 }
