@@ -6,6 +6,8 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
+Valleys
+
 Change line width based on dist:
  Vertex extenders
  Loop over each triangle
@@ -20,7 +22,6 @@ Change line width based on dist:
 (Normalize using gl.something(,,true,,))
 Move Shaders somewhere else
 Only pass attributes to GPU once and use in both shaders (how to use multiple shaders)
-Cel Shading
 Matrix inverse
 http://stackoverflow.com/a/29514445/3492994
 */
@@ -28,14 +29,15 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-13.74153029749956, 119.80755982476153, -184.15868065037967],
+var pos = [-49.64510627670076, -32.78980056478137, -22.324228434065205],
   velocity = [0, 0, 0];
 //-0.6695563612951321, -6.247855263929647, -32.9644536444527
 //-13.74153029749956, 119.80755982476153, -184.15868065037967
 //Rotation
 //var rotation = [0, 0, 0];
-var pitch = 50,
-  yaw = 0; //15,5
+var pitch = -370,
+  yaw = -660; //15,5
+//50, 0
 var scale = 0.05;
 
 var objectsToDraw = [];
@@ -44,7 +46,12 @@ var transparentObjectsToDraw = [];
 
 var drawDragon = true;
 
-var MatrixMath = {
+var celLineShader1;
+var celLineShaderMatrixUniform1;
+var celLineShaderNormalsLoc1;
+var celLineShaderWidthUniform;
+
+var MatMath = {
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
   },
@@ -149,6 +156,16 @@ var MatrixMath = {
     //Multiply each element of array2 by array1[i] and get their sum
     return array2.map((s, i) => array1[i] * s).reduce((prev, curr) => prev + curr);
   },
+  normalize: function(x, y, z) {
+    var length = Math.sqrt(x * x + y * y + z * z);
+    // make sure we don't divide by 0.
+    if (length > 0.00001) {
+      return [x / length, y / length, z / length];
+    }
+    else {
+      return [0, 0, 0];
+    }
+  },
   transpose: function(matrix) {
     if (matrix.length != 16) {
       throw Error("The matrix needs to be 4 * 4.");
@@ -248,10 +265,6 @@ var MatrixMath = {
   }
 };
 
-var celLineShader1;
-var celLineShaderMatrixUniform1;
-var celLineShaderNormalsLoc1;
-var celLineShaderWidthUniform;
 
 //Called by the body
 function start() {
@@ -262,8 +275,6 @@ function start() {
 
   if (gl) {
     vaoExt = gl.getExtension("OES_vertex_array_object");
-
-    var vbo = model["vertices"];
 
     var celLineVertexShader = createShader(`
     attribute vec3 coordinates;
@@ -301,17 +312,24 @@ function start() {
     calculateExtendersAndLines();
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["extenders"]), gl.STATIC_DRAW);
 
+
+    var vbo = model["vertices"];
+
     var vertexShader = createShader(`
     attribute vec3 coordinates;
     attribute vec3 a_normal;
+    attribute vec2 a_texcoord;
     uniform mat4 u_matrix; //The Matrix!
     
-    attribute vec2 a_texcoord;
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     
     void main(void){
-      gl_Position = u_matrix * vec4(coordinates + a_normal*0.0001, 1);
+      if(a_texcoord.x != -1.0){
+        gl_Position = u_matrix * vec4(coordinates, 1);
+      }else{
+        gl_Position = vec4(-1000);
+      }
       v_textureCoord = a_texcoord;
       v_normal = a_normal;
     }`, gl.VERTEX_SHADER);
@@ -383,11 +401,11 @@ function redraw() {
   pos[2] += velocity[2];
 
 
-  var camMat = MatrixMath.multiply(MatrixMath.rotationXMatrix(pitch), MatrixMath.rotationYMatrix(yaw));
-  camMat = MatrixMath.multiply(camMat, MatrixMath.translationMatrix(-pos[0], -pos[1], -pos[2]));
-  var viewMat = MatrixMath.makeInverseCrap(camMat);
+  var camMat = MatMath.multiply(MatMath.rotationXMatrix(pitch), MatMath.rotationYMatrix(yaw));
+  camMat = MatMath.multiply(camMat, MatMath.translationMatrix(-pos[0], -pos[1], -pos[2]));
+  var viewMat = MatMath.makeInverseCrap(camMat);
 
-  var matrix = MatrixMath.multiply(viewMat, MatrixMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
+  var matrix = MatMath.multiply(viewMat, MatMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 100));
   gl.disable(gl.BLEND);
 
   gl.cullFace(gl.FRONT);
@@ -398,7 +416,7 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.05);
+    gl.uniform1f(celLineShaderWidthUniform, 0.1);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
@@ -669,8 +687,8 @@ function initWebGL(canvas) {
 }
 
 function keyboardHandlerDown(keyboardEvent) {
-  var yawRad = MatrixMath.degToRad(yaw);
-  var pitchRad = MatrixMath.degToRad(pitch);
+  var yawRad = MatMath.degToRad(yaw);
+  var pitchRad = MatMath.degToRad(pitch);
   switch (keyboardEvent.code) {
     case "ArrowUp":
       velocity[0] = Math.sin(yawRad) * Math.cos(pitchRad);
@@ -719,13 +737,169 @@ function mouseHandler(mouseEvent) {
   pitch -= mouseEvent.movementY / 10;
 }
 
-
-
-
 function calculateExtendersAndLines() {
+  const off = 0.1;
   var ext = [];
+  var faceNormals = [];
+
+  var backfacingTriangles = [];
+  var bTriExt = [];
   if (model["extenders"] == undefined) {
+    //Face normals
     //Loop over all triangles
+    for (var tri = 0; tri < model["vertices"].length; tri += 9) {
+      /*
+      The cross product of two sides of the triangle equals the surface normal. 
+      So, if V = P2 - P1 and W = P3 - P1, and N is the surface normal, then:
+      Nx=(Vy*Wz)−(Vz*Wy)
+      Ny=(Vz*Wx)−(Vx*Wz)
+      Nz=(Vx*Wy)−(Vy*Wx)
+*/
+      var Vx = model["vertices"][tri + 3] - model["vertices"][tri];
+      var Vy = model["vertices"][tri + 4] - model["vertices"][tri + 1];
+      var Vz = model["vertices"][tri + 5] - model["vertices"][tri + 2];
+
+      var Wx = model["vertices"][tri + 6] - model["vertices"][tri];
+      var Wy = model["vertices"][tri + 7] - model["vertices"][tri + 1];
+      var Wz = model["vertices"][tri + 8] - model["vertices"][tri + 2];
+
+      //Face Normals
+      var Nx = (Vy * Wz) - (Vz * Wy);
+      var Ny = (Vz * Wx) - (Vx * Wz);
+      var Nz = (Vx * Wy) - (Vy * Wx);
+      //Normals
+      faceNormals.push(MatMath.normalize(Nx, Ny, Nz));
+
+      //MatMath.dotProcuct()
+    }
+
+    //Flipped triangles
+    for (var tri = 0; tri < model["vertices"].length; tri += 9) {
+      var adjTriangles = 0;
+      for (var triOther = tri + 9; triOther < model["vertices"].length; triOther += 9) {
+        var touching = false;
+        //For each vertex in that triangle
+        otherVert:
+          for (var vert = 0; vert < 9; vert += 3) {
+            for (var vertOther = 0; vertOther < 6; vertOther += 3) {
+              //Check if they are the same point
+              if (model.vertices[tri + vert] == model.vertices[triOther + vertOther] &&
+                model.vertices[tri + vert + 1] == model.vertices[triOther + vertOther + 1] &&
+                model.vertices[tri + vert + 2] == model.vertices[triOther + vertOther + 2]) {
+                //One point matches
+                //Check if another point matches and make 2 triangles opposite winding orders!
+                if ((model.vertices[tri + (vert + 3) % 9] == model.vertices[triOther + (vertOther + 3) % 9] &&
+                    model.vertices[tri + (vert + 1 + 3) % 9] == model.vertices[triOther + (vertOther + 1 + 3) % 9] &&
+                    model.vertices[tri + (vert + 2 + 3) % 9] == model.vertices[triOther + (vertOther + 2 + 3) % 9]) ||
+
+                  (model.vertices[tri + (vert + 3) % 9] == model.vertices[triOther + (vertOther + 6) % 9] &&
+                    model.vertices[tri + (vert + 1 + 3) % 9] == model.vertices[triOther + (vertOther + 1 + 6) % 9] &&
+                    model.vertices[tri + (vert + 2 + 3) % 9] == model.vertices[triOther + (vertOther + 2 + 6) % 9])) {
+
+                  if (Math.abs(MatMath.dotProcuct(faceNormals[tri / 9], faceNormals[triOther / 9])) != 0) {
+                    //Subtract face normals, make them larger!
+                    //Extenders merge
+                    backfacingTriangles.push(model.vertices[tri + vert] - faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + vert + 1] - faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + vert + 2] - faceNormals[tri / 9][2] * off);
+                    backfacingTriangles.push(model.vertices[tri + (vert + 6) % 9] - faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + (vert + 1 + 6) % 9] - faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + (vert + 2 + 6) % 9] - faceNormals[tri / 9][2] * off);
+                    backfacingTriangles.push(model.vertices[tri + (vert + 3) % 9] - faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + (vert + 1 + 3) % 9] - faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + (vert + 2 + 3) % 9] - faceNormals[tri / 9][2] * off);
+
+
+
+                    /*lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
+                      model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
+                      model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
+                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[triOther / 9][0] * off,
+                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[triOther / 9][1] * off,
+                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[triOther / 9][2] * off);
+                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[tri / 9][2] * off);
+
+                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[tri / 9][2] * off);
+                    lines.push(model.vertices[tri + vert] + faceNormals[tri / 9][0] * off,
+                      model.vertices[tri + vert + 1] + faceNormals[tri / 9][1] * off,
+                      model.vertices[tri + vert + 2] + faceNormals[tri / 9][2] * off);
+                    lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
+                      model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
+                      model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
+
+
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);
+                    */
+                    touching = true;
+                  }
+                  break otherVert;
+                }
+                if ((model.vertices[tri + (vert + 6) % 9] == model.vertices[triOther + (vertOther + 3) % 9] &&
+                    model.vertices[tri + (vert + 1 + 6) % 9] == model.vertices[triOther + (vertOther + 1 + 3) % 9] &&
+                    model.vertices[tri + (vert + 2 + 6) % 9] == model.vertices[triOther + (vertOther + 2 + 3) % 9]) ||
+
+                  (model.vertices[tri + (vert + 6) % 9] == model.vertices[triOther + (vertOther + 6) % 9] &&
+                    model.vertices[tri + (vert + 1 + 6) % 9] == model.vertices[triOther + (vertOther + 1 + 6) % 9] &&
+                    model.vertices[tri + (vert + 2 + 6) % 9] == model.vertices[triOther + (vertOther + 2 + 6) % 9])) {
+
+                  if (Math.abs(MatMath.dotProcuct(faceNormals[tri / 9], faceNormals[triOther / 9])) != 0) {
+                    backfacingTriangles.push(model.vertices[triOther + vert] - faceNormals[triOther / 9][0] * off,
+                      model.vertices[triOther + vert + 1] - faceNormals[triOther / 9][1] * off,
+                      model.vertices[triOther + vert + 2] - faceNormals[triOther / 9][2] * off);
+                    backfacingTriangles.push(model.vertices[triOther + (vert + 6) % 9] - faceNormals[triOther / 9][0] * off,
+                      model.vertices[triOther + (vert + 1 + 6) % 9] - faceNormals[triOther / 9][1] * off,
+                      model.vertices[triOther + (vert + 2 + 6) % 9] - faceNormals[triOther / 9][2] * off);
+                    backfacingTriangles.push(model.vertices[triOther + (vert + 3) % 9] - faceNormals[triOther / 9][0] * off,
+                      model.vertices[triOther + (vert + 1 + 3) % 9] - faceNormals[triOther / 9][1] * off,
+                      model.vertices[triOther + (vert + 2 + 3) % 9] - faceNormals[triOther / 9][2] * off);
+
+
+
+                    /*lines.push(model.vertices[tri + vert], model.vertices[tri + vert + 1], model.vertices[tri + vert + 2]);
+                    lines.push(model.vertices[tri + (vert + 6) % 9], model.vertices[tri + (vert + 1 + 6) % 9], model.vertices[tri + (vert + 2 + 6) % 9]);
+                    lines.push(model.vertices[tri + (vert + 6) % 9], model.vertices[tri + (vert + 1 + 6) % 9], model.vertices[tri + (vert + 2 + 6) % 9]);
+
+                    lines.push(model.vertices[tri + (vert + 6) % 9], model.vertices[tri + (vert + 1 + 3) % 9], model.vertices[tri + (vert + 2 + 6) % 9]);
+                    lines.push(model.vertices[tri + vert], model.vertices[tri + vert + 1], model.vertices[tri + vert + 2]);
+                    lines.push(model.vertices[tri + vert], model.vertices[tri + vert + 1], model.vertices[tri + vert + 2]);
+
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[tri / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);
+                    linesExt.push.apply(linesExt, faceNormals[triOther / 9]);*/
+                    touching = true;
+                  }
+
+                }
+                break otherVert;
+              }
+            }
+          }
+        if (touching) {
+          adjTriangles++;
+          if (adjTriangles == 3) {
+            break
+          }
+        }
+      }
+    }
+
+    model["vertices"].push.apply(model.vertices, backfacingTriangles);
+
+    //Extenders
     for (var tri = 0; tri < model["vertices"].length; tri += 9) {
       //Loop over each vertex
       for (var vert = 0; vert < 9; vert += 3) {
@@ -734,16 +908,30 @@ function calculateExtendersAndLines() {
           model["vertices"][tri + (vert + 3) % 9 + 1] + model["vertices"][tri + (vert + 6) % 9 + 1] >> 1,
           model["vertices"][tri + (vert + 3) % 9 + 2] + model["vertices"][tri + (vert + 6) % 9 + 2] >> 1
         ];
+
+        //Vector to edge
         ext.push(model["vertices"][tri + vert] - avg[0],
           model["vertices"][tri + vert + 1] - avg[1],
           model["vertices"][tri + vert + 2] - avg[2]);
-        //model["vertices"][ind]
-        //model["vertices"][ind + 1]
-        //model["vertices"][ind + 2]
-        //(6 + 3)%9
-        //(6 + 6)%9
       }
     }
   }
   model["extenders"] = ext;
+
+  model["normals"].push.apply(model.normals, new Array(backfacingTriangles.length).fill(0))
+  model["uvs"].push.apply(model.uvs, new Array(backfacingTriangles.length).fill(-1))
+}
+
+//Crap
+for (var ver = 0; ver < model.vertices.length; ver += 3) {
+  for (var ver1 = 0; ver1 < model.vertices.length; ver1 += 3) {
+    if (model.vertices[ver] == model.vertices[ver1] && model.vertices[ver + 1] == model.vertices[ver1 + 1] && model.vertices[ver + 2] == model.vertices[ver1 + 2]) {
+      console.log("Ver" + ver);
+      if (model.normals[ver] != model.normals[ver1] || model.normals[ver + 1] != model.normals[ver1 + 1] || model.normals[ver + 2] != model.normals[ver1 + 2]) {
+        console.log(model.vertices[ver] + "=" + model.vertices[ver1] + ':' + model.vertices[ver + 1] + "=" + model.vertices[ver1 + 1] + ':' + model.vertices[ver + 2] + "=" + model.vertices[ver1 + 2]);
+        console.log(model.normals[ver] + "!=" + model.normals[ver1] + ':' + model.normals[ver + 1] + "!=" + model.normals[ver1 + 1] + ':' + model.normals[ver + 2] + "!=" + model.normals[ver1 + 2]);
+        ver = Infinity;
+      }
+    }
+  }
 }
