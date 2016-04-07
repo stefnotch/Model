@@ -274,6 +274,7 @@ function start() {
   gl = initWebGL(glcanvas);
 
   if (gl) {
+    calculateExtendersAndLines();
     vaoExt = gl.getExtension("OES_vertex_array_object");
 
     var celLineVertexShader = createShader(`
@@ -306,10 +307,9 @@ function start() {
     var buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
-    gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, true, 0, 0);
+    gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
 
     // Set normals.
-    calculateExtendersAndLines();
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model["extenders"]), gl.STATIC_DRAW);
 
 
@@ -739,11 +739,11 @@ function mouseHandler(mouseEvent) {
 
 function calculateExtendersAndLines() {
   const off = 0.1;
+  const width = 0;
   var ext = [];
   var faceNormals = [];
 
   var backfacingTriangles = [];
-  var bTriExt = [];
   if (model["extenders"] == undefined) {
     //Face normals
     //Loop over all triangles
@@ -897,6 +897,7 @@ function calculateExtendersAndLines() {
       }
     }
 
+    var oldVerticesLength = model.vertices.length;
     model["vertices"].push.apply(model.vertices, backfacingTriangles);
 
     //Extenders
@@ -909,10 +910,15 @@ function calculateExtendersAndLines() {
           model["vertices"][tri + (vert + 3) % 9 + 2] + model["vertices"][tri + (vert + 6) % 9 + 2] >> 1
         ];
 
-        //Vector to edge
-        ext.push(model["vertices"][tri + vert] - avg[0],
-          model["vertices"][tri + vert + 1] - avg[1],
-          model["vertices"][tri + vert + 2] - avg[2]);
+        if (tri < oldVerticesLength) {
+          //Vector to edge
+          ext.push((model["vertices"][tri + vert] - avg[0]) * width,
+            (model["vertices"][tri + vert + 1] - avg[1]) * width,
+            (model["vertices"][tri + vert + 2] - avg[2]) * width);
+        }
+        else {
+          ext.push((model["vertices"][tri + vert] - avg[0]) * width, (model["vertices"][tri + vert + 1] - avg[1]) * width, (model["vertices"][tri + vert + 2] - avg[2]) * width);
+        }
       }
     }
   }
