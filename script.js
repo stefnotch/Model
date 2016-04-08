@@ -7,6 +7,7 @@ git push
 //Uses http://threejs.org/editor/
 /*TODO 
 Valleys
+Get rid of extenders and use normals instead
 
 Change line width based on dist:
  Vertex extenders
@@ -46,6 +47,7 @@ var transparentObjectsToDraw = [];
 
 var drawDragon = true;
 
+var celLineShader1Buffer;
 var celLineShader1;
 var celLineShaderMatrixUniform1;
 var celLineShaderNormalsLoc1;
@@ -304,8 +306,8 @@ function start() {
 
 
     // Create a buffer for normals.
-    var buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    var celLineShader1Buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, celLineShader1Buffer);
     gl.enableVertexAttribArray(celLineShaderNormalsLoc1);
     gl.vertexAttribPointer(celLineShaderNormalsLoc1, 3, gl.FLOAT, false, 0, 0);
 
