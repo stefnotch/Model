@@ -6,18 +6,7 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-Valleys
-Get rid of the extenders
-Change line width based on dist:
- Vertex extenders
- Loop over each triangle
-   Loop over each vertex
-     Calc vertex extenders: vertex.xyz - (average between 2 other points).xyz
-   
-   Loop over all other triangles(Max adjacents per triangle = 3)
-     Check if adjacent AND ( if the angle is fitting (thresholds) OR if marked?)
-       Add line (2 triangles, backfacing)
-
+Fix vallyes! (Front facing...?)
 
 (Normalize using gl.something(,,true,,))
 Move Shaders somewhere else
@@ -336,7 +325,7 @@ function start() {
       }else{
         light = 0.3;
       }
-      //light = 0.5;
+
       vec3 src = vec3(1,1,1);//vec3(texture2D(u_texture, v_textureCoord));
       if(light <= 0.5){
         gl_FragColor = vec4(src * 2.0 * light,1);
@@ -726,7 +715,7 @@ function mouseHandler(mouseEvent) {
 
 function calculateExtendersAndLines() {
   const off = 0.05;
-  const threshold = 0.6;
+  const threshold = 0.7;
   //const width = 0;
   var ext = [];
   var faceNormals = [];
