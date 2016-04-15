@@ -6,9 +6,10 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-Fix vallyes! (Front facing...?)
 
-(Normalize using gl.something(,,true,,))
+Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
+Fix vallyes!
+
 Move Shaders somewhere else
 Only pass attributes to GPU once and use in both shaders (how to use multiple shaders)
 Matrix inverse
@@ -716,12 +717,9 @@ function mouseHandler(mouseEvent) {
 function calculateExtendersAndLines() {
   const off = 0.05;
   const threshold = 0.7;
-  //const width = 0;
-  var ext = [];
   var faceNormals = [];
   var lines = [];
-  //var backfacingTriangles = [];
-  if (model["extenders"] == undefined) {
+  if (model["lines"] == undefined) {
     //Face normals
     //Loop over all triangles
     for (var tri = 0; tri < model["vertices"].length; tri += 9) {
@@ -772,8 +770,8 @@ function calculateExtendersAndLines() {
                   (model.vertices[tri + (vert + 3) % 9] == model.vertices[triOther + (vertOther + 6) % 9] &&
                     model.vertices[tri + (vert + 1 + 3) % 9] == model.vertices[triOther + (vertOther + 1 + 6) % 9] &&
                     model.vertices[tri + (vert + 2 + 3) % 9] == model.vertices[triOther + (vertOther + 2 + 6) % 9])) {
-
                   if (Math.abs(MatMath.dotProcuct(faceNormals[tri / 9], faceNormals[triOther / 9])) < threshold) {
+
                     //Subtract face normals, make them larger!
                     //Extenders merge
                     /*backfacingTriangles.push(model.vertices[tri + vert] - faceNormals[tri / 9][0] * off,
@@ -808,16 +806,6 @@ function calculateExtendersAndLines() {
                       model.vertices[tri + vert + 1] + faceNormals[tri / 9][1] * off,
                       model.vertices[tri + vert + 2] + faceNormals[tri / 9][2] * off);
 
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
-
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
-
-
-
                     touching = true;
                   }
                   break otherVert;
@@ -850,7 +838,7 @@ function calculateExtendersAndLines() {
                     lines.push(model.vertices[tri + (vert + 6) % 9] + faceNormals[triOther / 9][0] * off,
                       model.vertices[tri + (vert + 1 + 6) % 9] + faceNormals[triOther / 9][1] * off,
                       model.vertices[tri + (vert + 2 + 6) % 9] + faceNormals[triOther / 9][2] * off);
-                      
+
                     lines.push(model.vertices[tri + (vert + 6) % 9] + faceNormals[tri / 9][0] * off,
                       model.vertices[tri + (vert + 1 + 6) % 9] + faceNormals[tri / 9][1] * off,
                       model.vertices[tri + (vert + 2 + 6) % 9] + faceNormals[tri / 9][2] * off);
@@ -869,13 +857,8 @@ function calculateExtendersAndLines() {
                     lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
                       model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
                       model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
 
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
-                    //ext.push.apply(ext, faceNormals[tri / 9]);
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
-                    //ext.push.apply(ext, faceNormals[triOther / 9]);
+
                     touching = true;
                   }
 
@@ -891,38 +874,13 @@ function calculateExtendersAndLines() {
           }
         }
       }
+
     }
-
-    //var oldVerticesLength = model.vertices.length;
     model["vertices"].push.apply(model.vertices, lines);
-
-    //Extenders
-    /*for (var tri = 0; tri < model["vertices"].length; tri += 9) {
-      //Loop over each vertex
-      for (var vert = 0; vert < 9; vert += 3) {
-        //Average point
-        var avg = [model["vertices"][tri + (vert + 3) % 9] + model["vertices"][tri + (vert + 6) % 9] >> 1,
-          model["vertices"][tri + (vert + 3) % 9 + 1] + model["vertices"][tri + (vert + 6) % 9 + 1] >> 1,
-          model["vertices"][tri + (vert + 3) % 9 + 2] + model["vertices"][tri + (vert + 6) % 9 + 2] >> 1
-        ];
-
-        if (tri < oldVerticesLength) {
-          //Vector to edge
-          ext.push((model["vertices"][tri + vert] - avg[0]) * width,
-            (model["vertices"][tri + vert + 1] - avg[1]) * width,
-            (model["vertices"][tri + vert + 2] - avg[2]) * width);
-        }
-        else {
-          ext.push((model["vertices"][tri + vert] - avg[0]) * width, (model["vertices"][tri + vert + 1] - avg[1]) * width, (model["vertices"][tri + vert + 2] - avg[2]) * width);
-        }
-      }
-    }*/
+    model["normals"].push.apply(model.normals, new Array(lines.length).fill(0));
+    model["uvs"].push.apply(model.uvs, new Array(lines.length).fill(-1));
   }
-
-  model["normals"].push.apply(model.normals, new Array(lines.length).fill(0));
-  model["uvs"].push.apply(model.uvs, new Array(lines.length).fill(-1));
 }
-
 //Crap
 for (var ver = 0; ver < model.vertices.length; ver += 3) {
   for (var ver1 = 0; ver1 < model.vertices.length; ver1 += 3) {
