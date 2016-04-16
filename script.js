@@ -6,7 +6,7 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-
+Get rid of old files
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
 Fix vallyes!
 
@@ -19,14 +19,14 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-49.64510627670076, -32.78980056478137, -22.324228434065205],
+var pos = [-0.9248072232763789, 9.924346853658541, -56.26606595458085],
   velocity = [0, 0, 0];
 //-0.6695563612951321, -6.247855263929647, -32.9644536444527
 //-13.74153029749956, 119.80755982476153, -184.15868065037967
 //Rotation
 //var rotation = [0, 0, 0];
-var pitch = -370,
-  yaw = -660; //15,5
+var pitch = -278,
+  yaw = -720; //15,5
 //50, 0
 var scale = 0.05;
 
@@ -39,6 +39,9 @@ var drawDragon = true;
 var celLineShader1;
 var celLineShaderMatrixUniform1;
 var celLineShaderWidthUniform;
+
+
+var texHAX = [];
 
 var MatMath = {
   degToRad: function(angleInDeg) {
@@ -263,17 +266,17 @@ function start() {
   gl = initWebGL(glcanvas);
 
   if (gl) {
-    calculateExtendersAndLines();
+    //calculateExtendersAndLines();
     vaoExt = gl.getExtension("OES_vertex_array_object");
 
     var celLineVertexShader = createShader(`
-    attribute vec3 coordinates;
+    attribute vec3 a_coordinate;
     attribute vec3 a_normal;
     uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
     
     void main(void){
-      gl_Position = u_matrix * vec4(coordinates + a_normal * u_width, 1);
+      gl_Position = u_matrix * vec4(a_coordinate + a_normal * u_width, 1);
       
     }`, gl.VERTEX_SHADER);
 
@@ -290,10 +293,8 @@ function start() {
     celLineShaderWidthUniform = gl.getUniformLocation(celLineShader1, "u_width");
 
 
-    var vbo = model["vertices"];
-
     var vertexShader = createShader(`
-    attribute vec3 coordinates;
+    attribute vec3 a_coordinate;
     attribute vec3 a_normal;
     attribute vec2 a_texcoord;
     uniform mat4 u_matrix; //The Matrix!
@@ -303,7 +304,7 @@ function start() {
     
     void main(void){
       if(a_texcoord.x != -1.0){
-        gl_Position = u_matrix * vec4(coordinates, 1);
+        gl_Position = u_matrix * vec4(a_coordinate, 1);
       }else{
         gl_Position = vec4(-1000);
       }
@@ -318,7 +319,7 @@ function start() {
     uniform sampler2D u_texture;
     
     void main() {
-        float light = dot(v_normal, normalize(vec3(0,-1,0)));
+        float light = dot(v_normal, normalize(vec3(-1,0,0)));
       if(light <= 1.0/16.0 * 2.0){
         light = 0.5;
       }else if(light <= 1.0/16.0 * 7.0){
@@ -327,29 +328,24 @@ function start() {
         light = 0.3;
       }
 
-      vec3 src = vec3(1,1,1);//vec3(texture2D(u_texture, v_textureCoord));
+      vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
       if(light <= 0.5){
         gl_FragColor = vec4(src * 2.0 * light,1);
       }else{
         gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
       }
-      
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-
-    addObjectToDraw(shaderProgram, {
-      "coordinates": vbo,
-      "a_normal": model["normals"]
-    }, "u_matrix", {
-      name: "NarutoTex.png",
-      loc: gl.getAttribLocation(shaderProgram, "a_texcoord"),
-      vertices: model["uvs"]
+  
+    for(var i = 0; i < model.length; i++){
+      addObjectToDraw(shaderProgram, model[i], "u_matrix", {
+      name: model[i][0],
     });
-
-
+    }
+    
 
     //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     //loadTexture("https://i.imgur.com/PxWbS.gif");
@@ -382,18 +378,19 @@ function redraw() {
   camMat = MatMath.multiply(camMat, MatMath.translationMatrix(-pos[0], -pos[1], -pos[2]));
   var viewMat = MatMath.makeInverseCrap(camMat);
 
-  var matrix = MatMath.multiply(viewMat, MatMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 100));
+  var matrix = MatMath.multiply(viewMat, MatMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
   gl.disable(gl.BLEND);
 
   gl.cullFace(gl.FRONT);
   gl.enable(gl.CULL_FACE);
 
+  //Check what is faster: moving this into the other loop or leaving it this way
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.1);
+    gl.uniform1f(celLineShaderWidthUniform, 0.2);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
@@ -403,18 +400,21 @@ function redraw() {
 
   gl.disable(gl.CULL_FACE);
 
+  var c = 0;
   //gl.enable(gl.CULL_FACE);
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
+    gl.bindTexture(gl.TEXTURE_2D, texHAX[c]);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     //Bind VAO
-    //vaoExt.bindVertexArrayOES(object.vao);
+    vaoExt.bindVertexArrayOES(object.vao);
+
     //Draw the object
     if (drawDragon)
       gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);  
+    c++;
   });
 
 
@@ -455,33 +455,15 @@ function loadTexture(textureLocation) {
   // Asynchronously load an image
   var image = new Image();
   image.src = textureLocation;
+
   image.addEventListener('load', function() {
     // Now that the image has loaded make copy it to the texture.
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    if (textureLocation[0] == "1") {
-      // For Crying Out Loud Don't Let OpenGL Use Bi/Trilinear Filtering!
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-      gl.texParameteri(gl.TEXTURE_1D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    }
-    else {
-      //Generate some mipmaps!
-      gl.generateMipmap(gl.TEXTURE_2D);
-    }
-
-
-
+    //Generate some mipmaps!
+    gl.generateMipmap(gl.TEXTURE_2D);
   });
-  //setTimeout("", 10000);
   return texture;
-}
-
-function createTexture(textureLocation, textureCoordsAttribute, textureCoords = -1) {
-  loadTexture(textureLocation);
-  if (textureCoords != -1) {
-    createVBO(textureCoords);
-    setAttribute(textureCoordsAttribute, 2);
-  }
 }
 
 /** 
@@ -501,7 +483,7 @@ function createVBO(vertices) {
  * Creates a buffer and attributes
  * 
  */
-function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER, numComponents = 3) {
+function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER, numComponents = 3, stride = 0, offset = 0) {
 
   if (typeof attributeName === 'string') {
     //TODO Do something about it!
@@ -511,7 +493,7 @@ function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER,
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
   gl.enableVertexAttribArray(attribute);
-  gl.vertexAttribPointer(attribute, numComponents, gl.FLOAT, false, 0, 0);
+  gl.vertexAttribPointer(attribute, numComponents, gl.FLOAT, false, stride, offset);
 
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
 }
@@ -567,35 +549,56 @@ function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize =
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(shaderProgram, attributes, uniformName, texture) {
+function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO  
   vaoExt.bindVertexArrayOES(vao);
   //Create a VBO
-  if ("coordinates" in attributes) {
-    createBufferAndAttribute(attributes["coordinates"], gl.getAttribLocation(shaderProgram, "coordinates"));
-  }
+  var buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
-  if ("a_normal" in attributes) {
-    createBufferAndAttribute(attributes["a_normal"], gl.getAttribLocation(shaderProgram, "a_normal"));
-  }
+  //CO, UV, NORMALS
+  var coAtt = gl.getAttribLocation(shaderProgram, "a_coordinate");
+  gl.enableVertexAttribArray(coAtt);
+  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4), 
+  offset (must be a multiple of the type)*/
+  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 8 * 4, 4);
+
+  texHAX.push(loadTexture("Model/" + texture["name"]));
+
+  var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
+  gl.enableVertexAttribArray(uvAtt);
+  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 8 * 4, 4 + 3 * 4);
+
+  var noAtt = gl.getAttribLocation(shaderProgram, "a_normal");
+  gl.enableVertexAttribArray(noAtt);
+  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 8 * 4, 4 + 3 * 4 + 2 * 4);
+
+
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
+
   //TODO support more attributes
-  createTexture(texture["name"], texture["loc"], texture["vertices"]);
+
+  //if (textureCoords != -1) {
+  //  createVBO(textureCoords);
+  //  setAttribute(textureCoordsAttribute, 2);
+  //}
+  //createTexture(texture["name"], gl.getAttribLocation(shaderProgram, texture["loc"]), texture["vertices"]);
 
   vaoExt.bindVertexArrayOES(null);
 
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: attributes["coordinates"].length,
+    bufferLength: (object.length - (2 * (object.length / 8)) - (3 * (object.length / 8))), //Subtract the UVs, subtract the vertex normals
     uniforms: gl.getUniformLocation(shaderProgram, uniformName)
   };
 }
 
-function addObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
+function addObjectToDraw(shaderProgram, object, uniformName, texture) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, attributes, uniformName, textureName));
+    createObjectToDraw(shaderProgram, object, uniformName, texture));
 }
 
 function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
@@ -714,6 +717,7 @@ function mouseHandler(mouseEvent) {
   pitch -= mouseEvent.movementY / 10;
 }
 
+//Oh, great </sarcasm> I have to fix this...
 function calculateExtendersAndLines() {
   const off = 0.05;
   const threshold = 0.7;
@@ -881,7 +885,8 @@ function calculateExtendersAndLines() {
     model["uvs"].push.apply(model.uvs, new Array(lines.length).fill(-1));
   }
 }
-//Crap
+//Crap, same vertex, different vertex normal
+/*
 for (var ver = 0; ver < model.vertices.length; ver += 3) {
   for (var ver1 = 0; ver1 < model.vertices.length; ver1 += 3) {
     if (model.vertices[ver] == model.vertices[ver1] && model.vertices[ver + 1] == model.vertices[ver1 + 1] && model.vertices[ver + 2] == model.vertices[ver1 + 2]) {
@@ -894,3 +899,4 @@ for (var ver = 0; ver < model.vertices.length; ver += 3) {
     }
   }
 }
+*/
