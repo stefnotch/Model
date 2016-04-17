@@ -390,7 +390,7 @@ function redraw() {
     gl.useProgram(celLineShader1);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
-    gl.uniform1f(celLineShaderWidthUniform, 0.2);
+    gl.uniform1f(celLineShaderWidthUniform, 0.1);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
