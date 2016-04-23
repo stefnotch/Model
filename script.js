@@ -297,10 +297,12 @@ function start() {
     attribute vec3 a_coordinate;
     attribute vec3 a_normal;
     attribute vec2 a_texcoord;
+    attribute vec3 a_bary;
     uniform mat4 u_matrix; //The Matrix!
     
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
+    varying vec3 v_bary;
     
     void main(void){
       if(a_texcoord.x != -1.0){
@@ -310,29 +312,35 @@ function start() {
       }
       v_textureCoord = a_texcoord;
       v_normal = a_normal;
+      v_bary = a_bary;
     }`, gl.VERTEX_SHADER);
 
     var fragmentShader = createShader(`
     precision mediump float;
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
+    varying vec3 v_bary;
     uniform sampler2D u_texture;
     
     void main() {
+    if(any(lessThan(v_bary, vec3(0.02)))){
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+      }else{
         float light = dot(v_normal, normalize(vec3(-1,0,0)));
-      if(light <= 1.0/16.0 * 2.0){
-        light = 0.5;
-      }else if(light <= 1.0/16.0 * 7.0){
-        light = 0.4;
-      }else{
-        light = 0.3;
-      }
-
-      vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
-      if(light <= 0.5){
-        gl_FragColor = vec4(src * 2.0 * light,1);
-      }else{
-        gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
+        if(light <= 1.0/16.0 * 2.0){
+          light = 0.5;
+        }else if(light <= 1.0/16.0 * 7.0){
+          light = 0.4;
+        }else{
+          light = 0.3;
+        }
+  
+        vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
+        if(light <= 0.5){
+          gl_FragColor = vec4(src * 2.0 * light,1);
+        }else{
+          gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
+        }
       }
     }`, gl.FRAGMENT_SHADER);
 
@@ -563,19 +571,23 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   gl.enableVertexAttribArray(coAtt);
   /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4), 
   offset (must be a multiple of the type)*/
-  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 8 * 4, 4);
+  //Stride: 3*vertex, 2*uv, 3*normal,3*bary
+  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 11 * 4, 4);
 
   texHAX.push(loadTexture("Model/" + texture["name"]));
 
   var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
   gl.enableVertexAttribArray(uvAtt);
-  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 8 * 4, 4 + 3 * 4);
+  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 11 * 4, 4 + 3 * 4);
 
   var noAtt = gl.getAttribLocation(shaderProgram, "a_normal");
   gl.enableVertexAttribArray(noAtt);
-  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 8 * 4, 4 + 3 * 4 + 2 * 4);
+  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 11 * 4, 4 + 3 * 4 + 2 * 4);
 
-
+  var baryAtt = gl.getAttribLocation(shaderProgram, "a_bary");
+  gl.enableVertexAttribArray(baryAtt);
+  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, true, 11 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
+  
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
   //TODO support more attributes
@@ -591,7 +603,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: (object.length - (2 * (object.length / 8)) - (3 * (object.length / 8))), //Subtract the UVs, subtract the vertex normals
+    bufferLength: (object.length - (2 * (object.length / 11)) - (3 * (object.length / 11)) - (3*(object.length/11)) ), //Subtract the UVs, subtract the vertex normals
     uniforms: gl.getUniformLocation(shaderProgram, uniformName)
   };
 }
