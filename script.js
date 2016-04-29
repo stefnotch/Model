@@ -1,12 +1,13 @@
 /*
 git commit -am "your message goes here"
-git push
+git push 
 */
 /*global model*/
 
 //Uses http://threejs.org/editor/
 /*TODO 
 Get rid of old files
+Get rid of texHAX
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
 Fix vallyes!
 
@@ -40,7 +41,7 @@ var celLineShader1;
 var celLineShaderMatrixUniform1;
 var celLineShaderWidthUniform;
 
-
+//TODO Get rid of this super dirty hack
 var texHAX = [];
 
 var MatMath = {
