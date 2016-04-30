@@ -6,7 +6,9 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
-Get rid of old files
+Rotating light source
+USE gl.readPixels and apply the magic thing to all textures prefixed with l_
+apply edge detection shader to textures
 Get rid of texHAX
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
 Fix vallyes!
@@ -322,7 +324,7 @@ function start() {
     varying vec3 v_normal;
     varying vec3 v_bary;
     uniform sampler2D u_texture;
-    
+
     void main() {
     if(any(lessThan(v_bary, vec3(0.02)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -335,7 +337,6 @@ function start() {
         }else{
           light = 0.3;
         }
-  
         vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
         if(light <= 0.5){
           gl_FragColor = vec4(src * 2.0 * light,1);
@@ -348,13 +349,13 @@ function start() {
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-  
-    for(var i = 0; i < model.length; i++){
+
+    for (var i = 0; i < model.length; i++) {
       addObjectToDraw(shaderProgram, model[i], "u_matrix", {
-      name: model[i][0],
-    });
+        name: model[i][0],
+      });
     }
-    
+
 
     //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     //loadTexture("https://i.imgur.com/PxWbS.gif");
@@ -461,20 +462,54 @@ function loadTexture(textureLocation) {
   // Fill the texture with a 1x1 blue pixel.
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
     new Uint8Array([0, 0, 255, 255]));
+  if (textureLocation.endsWith("nonexistent.png")) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([255, 255, 255, 255]));
+    return texture;
+  }
   // Asynchronously load an image
   var image = new Image();
   image.src = textureLocation;
 
   image.addEventListener('load', function() {
-    // Now that the image has loaded make copy it to the texture.
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    //Generate some mipmaps!
-    gl.generateMipmap(gl.TEXTURE_2D);
+    if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
+      // Scale up the texture to the next highest power of two dimensions.
+      /*var canvas = document.createElement("canvas");
+      canvas.width = nextHighestPowerOfTwo(image.width);
+      canvas.height = nextHighestPowerOfTwo(image.height);
+      var ctx = canvas.getContext("2d");
+      ctx.drawImage(image, 0, 0, image.width, image.height);
+      image = canvas;*/
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      //No mipmaps
+      // Now that the image has loaded make copy it to the texture.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    }
+    else {
+      //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+      // Now that the image has loaded make copy it to the texture.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      //Generate some mipmaps!
+      gl.generateMipmap(gl.TEXTURE_2D);
+    }
   });
   return texture;
 }
 
+function isPowerOfTwo(x) {
+  return (x & (x - 1)) == 0;
+}
+
+function nextHighestPowerOfTwo(x) {
+  --x;
+  for (var i = 1; i < 32; i <<= 1) {
+    x = x | x >> i;
+  }
+  return x + 1;
+}
 /** 
  * Creates and uploads a VBO to the GPU
  */
@@ -575,7 +610,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   //Stride: 3*vertex, 2*uv, 3*normal,3*bary
   gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 11 * 4, 4);
 
-  texHAX.push(loadTexture("Model/" + texture["name"]));
+  texHAX.push(loadTexture("Model/tex/" + texture["name"]));
 
   var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
   gl.enableVertexAttribArray(uvAtt);
@@ -588,7 +623,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   var baryAtt = gl.getAttribLocation(shaderProgram, "a_bary");
   gl.enableVertexAttribArray(baryAtt);
   gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, true, 11 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
-  
+
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
   //TODO support more attributes
@@ -604,7 +639,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: (object.length - (2 * (object.length / 11)) - (3 * (object.length / 11)) - (3*(object.length/11)) ), //Subtract the UVs, subtract the vertex normals
+    bufferLength: (object.length - (2 * (object.length / 11)) - (3 * (object.length / 11)) - (3 * (object.length / 11))), //Subtract the UVs, subtract the vertex normals
     uniforms: gl.getUniformLocation(shaderProgram, uniformName)
   };
 }
