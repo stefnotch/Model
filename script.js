@@ -156,8 +156,7 @@ var MatMath = {
     // make sure we don't divide by 0.
     if (length > 0.00001) {
       return [x / length, y / length, z / length];
-    }
-    else {
+    } else {
       return [0, 0, 0];
     }
   },
@@ -472,26 +471,32 @@ function loadTexture(textureLocation) {
   image.src = textureLocation;
 
   image.addEventListener('load', function() {
+    var mips = false;
+    //Bind the texture
     gl.bindTexture(gl.TEXTURE_2D, texture);
     if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-      // Scale up the texture to the next highest power of two dimensions.
-      /*var canvas = document.createElement("canvas");
-      canvas.width = nextHighestPowerOfTwo(image.width);
-      canvas.height = nextHighestPowerOfTwo(image.height);
-      var ctx = canvas.getContext("2d");
-      ctx.drawImage(image, 0, 0, image.width, image.height);
-      image = canvas;*/
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      //No mipmaps
-      // Now that the image has loaded make copy it to the texture.
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    }
-    else {
+      if (image.width == image.height) {
+        // Scale up the texture to the next highest power of two dimensions.
+        var canvas = document.createElement("canvas");
+        canvas.width = nextHighestPowerOfTwo(image.width);
+        canvas.height = nextHighestPowerOfTwo(image.height);
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        image = canvas;
+        mips = true;
+      } else {
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        //No mipmaps
+      }
+    } else {
       //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-      // Now that the image has loaded make copy it to the texture.
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      mips = true;
+    }
+    // Now that the image has loaded make copy it to the texture.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    if (mips) {
       //Generate some mipmaps!
       gl.generateMipmap(gl.TEXTURE_2D);
     }
@@ -550,8 +555,7 @@ function createShader(shaderCode, shaderType = -1) {
     //Vertex shader
     if (shaderCode.indexOf("gl_Position") >= 0) {
       shaderType = gl.VERTEX_SHADER;
-    }
-    else {
+    } else {
       shaderType = gl.FRAGMENT_SHADER;
     }
   }
@@ -687,18 +691,9 @@ function initWebGL(canvas) {
   // browser supports WebGL
   if (window.WebGLRenderingContext) {
     try {
-      // Try to grab the standard context. If it fails, fallback to experimental.
-      gl = canvas.getContext("webgl"
-        /*, {
-                premultipliedAlpha: false // Ask for non-premultiplied alpha
-              }*/
-      ) || canvas.getContext("experimental-webgl"
-        /*, {
-                premultipliedAlpha: false // Ask for non-premultiplied alpha
-              }*/
-      );
-    }
-    catch (e) {
+      // Try to grab the new context. If it fails, fallback to webgl.
+      gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+    } catch (e) {
       alert(e);
     }
     if (!gl) {
@@ -706,8 +701,7 @@ function initWebGL(canvas) {
       gl = null;
     }
     console.log(gl);
-  }
-  else {
+  } else {
     alert("No WebGL?");
   }
 
@@ -764,187 +758,3 @@ function mouseHandler(mouseEvent) {
   yaw -= mouseEvent.movementX / 10;
   pitch -= mouseEvent.movementY / 10;
 }
-
-//Oh, great </sarcasm> I have to fix this...
-function calculateExtendersAndLines() {
-  const off = 0.05;
-  const threshold = 0.7;
-  var faceNormals = [];
-  var lines = [];
-  if (model["lines"] == undefined) {
-    //Face normals
-    //Loop over all triangles
-    for (var tri = 0; tri < model["vertices"].length; tri += 9) {
-      /*
-      The cross product of two sides of the triangle equals the surface normal. 
-      So, if V = P2 - P1 and W = P3 - P1, and N is the surface normal, then:
-      Nx=(Vy*Wz)−(Vz*Wy)
-      Ny=(Vz*Wx)−(Vx*Wz)
-      Nz=(Vx*Wy)−(Vy*Wx)
-*/
-      var Vx = model["vertices"][tri + 3] - model["vertices"][tri];
-      var Vy = model["vertices"][tri + 4] - model["vertices"][tri + 1];
-      var Vz = model["vertices"][tri + 5] - model["vertices"][tri + 2];
-
-      var Wx = model["vertices"][tri + 6] - model["vertices"][tri];
-      var Wy = model["vertices"][tri + 7] - model["vertices"][tri + 1];
-      var Wz = model["vertices"][tri + 8] - model["vertices"][tri + 2];
-
-      //Face Normals
-      var Nx = (Vy * Wz) - (Vz * Wy);
-      var Ny = (Vz * Wx) - (Vx * Wz);
-      var Nz = (Vx * Wy) - (Vy * Wx);
-      //Normals
-      faceNormals.push(MatMath.normalize(Nx, Ny, Nz));
-
-      //MatMath.dotProcuct()
-    }
-
-    //Flipped triangles
-    for (var tri = 0; tri < model["vertices"].length; tri += 9) {
-      var adjTriangles = 0;
-      for (var triOther = tri + 9; triOther < model["vertices"].length; triOther += 9) {
-        var touching = false;
-        //For each vertex in that triangle
-        otherVert:
-          for (var vert = 0; vert < 9; vert += 3) {
-            for (var vertOther = 0; vertOther < 6; vertOther += 3) {
-              //Check if they are the same point
-              if (model.vertices[tri + vert] == model.vertices[triOther + vertOther] &&
-                model.vertices[tri + vert + 1] == model.vertices[triOther + vertOther + 1] &&
-                model.vertices[tri + vert + 2] == model.vertices[triOther + vertOther + 2]) {
-                //One point matches
-                //Check if another point matches and make 2 triangles opposite winding orders!
-                if ((model.vertices[tri + (vert + 3) % 9] == model.vertices[triOther + (vertOther + 3) % 9] &&
-                    model.vertices[tri + (vert + 1 + 3) % 9] == model.vertices[triOther + (vertOther + 1 + 3) % 9] &&
-                    model.vertices[tri + (vert + 2 + 3) % 9] == model.vertices[triOther + (vertOther + 2 + 3) % 9]) ||
-
-                  (model.vertices[tri + (vert + 3) % 9] == model.vertices[triOther + (vertOther + 6) % 9] &&
-                    model.vertices[tri + (vert + 1 + 3) % 9] == model.vertices[triOther + (vertOther + 1 + 6) % 9] &&
-                    model.vertices[tri + (vert + 2 + 3) % 9] == model.vertices[triOther + (vertOther + 2 + 6) % 9])) {
-                  if (Math.abs(MatMath.dotProcuct(faceNormals[tri / 9], faceNormals[triOther / 9])) < threshold) {
-
-                    //Subtract face normals, make them larger!
-                    //Extenders merge
-                    /*backfacingTriangles.push(model.vertices[tri + vert] - faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + vert + 1] - faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + vert + 2] - faceNormals[tri / 9][2] * off);
-                    backfacingTriangles.push(model.vertices[tri + (vert + 6) % 9] - faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 6) % 9] - faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 6) % 9] - faceNormals[tri / 9][2] * off);
-                    backfacingTriangles.push(model.vertices[tri + (vert + 3) % 9] - faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 3) % 9] - faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 3) % 9] - faceNormals[tri / 9][2] * off);
-*/
-
-
-                    lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
-                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[tri / 9][2] * off);
-                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[triOther / 9][2] * off);
-
-                    lines.push(model.vertices[tri + (vert + 3) % 9] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 3) % 9] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 3) % 9] + faceNormals[tri / 9][2] * off);
-                    lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
-                    lines.push(model.vertices[tri + vert] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[tri / 9][2] * off);
-
-                    touching = true;
-                  }
-                  break otherVert;
-                }
-                if ((model.vertices[tri + (vert + 6) % 9] == model.vertices[triOther + (vertOther + 3) % 9] &&
-                    model.vertices[tri + (vert + 1 + 6) % 9] == model.vertices[triOther + (vertOther + 1 + 3) % 9] &&
-                    model.vertices[tri + (vert + 2 + 6) % 9] == model.vertices[triOther + (vertOther + 2 + 3) % 9]) ||
-
-                  (model.vertices[tri + (vert + 6) % 9] == model.vertices[triOther + (vertOther + 6) % 9] &&
-                    model.vertices[tri + (vert + 1 + 6) % 9] == model.vertices[triOther + (vertOther + 1 + 6) % 9] &&
-                    model.vertices[tri + (vert + 2 + 6) % 9] == model.vertices[triOther + (vertOther + 2 + 6) % 9])) {
-
-                  if (Math.abs(MatMath.dotProcuct(faceNormals[tri / 9], faceNormals[triOther / 9])) < threshold) {
-                    /*backfacingTriangles.push(model.vertices[triOther + vert] - faceNormals[triOther / 9][0] * off,
-                      model.vertices[triOther + vert + 1] - faceNormals[triOther / 9][1] * off,
-                      model.vertices[triOther + vert + 2] - faceNormals[triOther / 9][2] * off);
-                    backfacingTriangles.push(model.vertices[triOther + (vert + 6) % 9] - faceNormals[triOther / 9][0] * off,
-                      model.vertices[triOther + (vert + 1 + 6) % 9] - faceNormals[triOther / 9][1] * off,
-                      model.vertices[triOther + (vert + 2 + 6) % 9] - faceNormals[triOther / 9][2] * off);
-                    backfacingTriangles.push(model.vertices[triOther + (vert + 3) % 9] - faceNormals[triOther / 9][0] * off,
-                      model.vertices[triOther + (vert + 1 + 3) % 9] - faceNormals[triOther / 9][1] * off,
-                      model.vertices[triOther + (vert + 2 + 3) % 9] - faceNormals[triOther / 9][2] * off);
-*/
-
-                    //Line triangle one
-                    lines.push(model.vertices[tri + vert] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[tri / 9][2] * off);
-
-                    lines.push(model.vertices[tri + (vert + 6) % 9] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 6) % 9] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 6) % 9] + faceNormals[triOther / 9][2] * off);
-
-                    lines.push(model.vertices[tri + (vert + 6) % 9] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 6) % 9] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 6) % 9] + faceNormals[tri / 9][2] * off);
-
-
-
-                    //Line triangle two
-                    lines.push(model.vertices[tri + (vert + 6) % 9] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + (vert + 1 + 6) % 9] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + (vert + 2 + 6) % 9] + faceNormals[triOther / 9][2] * off);
-
-                    lines.push(model.vertices[tri + vert] + faceNormals[tri / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[tri / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[tri / 9][2] * off);
-
-                    lines.push(model.vertices[tri + vert] + faceNormals[triOther / 9][0] * off,
-                      model.vertices[tri + vert + 1] + faceNormals[triOther / 9][1] * off,
-                      model.vertices[tri + vert + 2] + faceNormals[triOther / 9][2] * off);
-
-
-                    touching = true;
-                  }
-
-                }
-                break otherVert;
-              }
-            }
-          }
-        if (touching) {
-          adjTriangles++;
-          if (adjTriangles == 3) {
-            break;
-          }
-        }
-      }
-
-    }
-    model["vertices"].push.apply(model.vertices, lines);
-    model["normals"].push.apply(model.normals, new Array(lines.length).fill(0));
-    model["uvs"].push.apply(model.uvs, new Array(lines.length).fill(-1));
-  }
-}
-//Crap, same vertex, different vertex normal
-/*
-for (var ver = 0; ver < model.vertices.length; ver += 3) {
-  for (var ver1 = 0; ver1 < model.vertices.length; ver1 += 3) {
-    if (model.vertices[ver] == model.vertices[ver1] && model.vertices[ver + 1] == model.vertices[ver1 + 1] && model.vertices[ver + 2] == model.vertices[ver1 + 2]) {
-      console.log("Ver" + ver);
-      if (model.normals[ver] != model.normals[ver1] || model.normals[ver + 1] != model.normals[ver1 + 1] || model.normals[ver + 2] != model.normals[ver1 + 2]) {
-        console.log(model.vertices[ver] + "=" + model.vertices[ver1] + ':' + model.vertices[ver + 1] + "=" + model.vertices[ver1 + 1] + ':' + model.vertices[ver + 2] + "=" + model.vertices[ver1 + 2]);
-        console.log(model.normals[ver] + "!=" + model.normals[ver1] + ':' + model.normals[ver + 1] + "!=" + model.normals[ver1 + 1] + ':' + model.normals[ver + 2] + "!=" + model.normals[ver1 + 2]);
-        ver = Infinity;
-      }
-    }
-  }
-}
-*/
