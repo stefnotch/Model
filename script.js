@@ -401,8 +401,8 @@ function redraw() {
     gl.uniform1f(celLineShaderWidthUniform, 0.1);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the object
-    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //Draw the outlines
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -726,7 +726,7 @@ function handleFileSelect(evt) {
 
   var files = evt.dataTransfer.files; // FileList object.
   var reader = new FileReader();
-  reader.addEventListener("load",data=>{
+  reader.addEventListener("loadend",data=>{
     //Sorry
     eval(data.target.result);
     start();
