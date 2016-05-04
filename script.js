@@ -6,23 +6,23 @@ git push
 
 //Uses http://threejs.org/editor/
 /*TODO 
+bones
 Rotating light source
-USE gl.readPixels and apply the magic thing to all textures prefixed with l_
-apply edge detection shader to textures
-Get rid of texHAX
+hide object upon click
+USE gl.readPixels and apply an edge detection shader to all textures prefixed with l_
+Apply a sharpen shader to all textures prefixed with s_
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
-Fix vallyes!
+Don't switch shaders as often
 
+Normalize -> 32 bits (float) to 8 bits (0,1 range)
 Move Shaders somewhere else
-Only pass attributes to GPU once and use in both shaders (how to use multiple shaders)
 Matrix inverse
-http://stackoverflow.com/a/29514445/3492994
 */
 var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-0.9248072232763789, 9.924346853658541, -56.26606595458085],
+var pos = [-0.9248072232763789, -70, -56.26606595458085],
   velocity = [0, 0, 0];
 //-0.6695563612951321, -6.247855263929647, -32.9644536444527
 //-13.74153029749956, 119.80755982476153, -184.15868065037967
@@ -43,8 +43,8 @@ var celLineShader1;
 var celLineShaderMatrixUniform1;
 var celLineShaderWidthUniform;
 
-//TODO Get rid of this super dirty hack
-var texHAX = [];
+//TODO Move to addObjectsToDraw
+var objectTexture = [];
 
 var MatMath = {
   degToRad: function(angleInDeg) {
@@ -262,6 +262,7 @@ var MatMath = {
 
 //Called by the body
 function start() {
+  
   initCanvas("glcanvas");
 
   //Init WebGL
@@ -300,6 +301,7 @@ function start() {
     attribute vec3 a_normal;
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
+    attribute float a_bone;
     uniform mat4 u_matrix; //The Matrix!
     
     varying vec2 v_textureCoord;
@@ -307,11 +309,7 @@ function start() {
     varying vec3 v_bary;
     
     void main(void){
-      if(a_texcoord.x != -1.0){
-        gl_Position = u_matrix * vec4(a_coordinate, 1);
-      }else{
-        gl_Position = vec4(-1000);
-      }
+      gl_Position = u_matrix * vec4(a_coordinate + vec3(a_bone) * 10.0, 1);
       v_textureCoord = a_texcoord;
       v_normal = a_normal;
       v_bary = a_bary;
@@ -354,7 +352,8 @@ function start() {
         name: model[i][0],
       });
     }
-
+    //Get rid of model, make it easier for the garbage collector
+    //model = null;
 
     //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     //loadTexture("https://i.imgur.com/PxWbS.gif");
@@ -403,7 +402,7 @@ function redraw() {
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);  
   });
 
@@ -414,7 +413,7 @@ function redraw() {
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
-    gl.bindTexture(gl.TEXTURE_2D, texHAX[c]);
+    gl.bindTexture(gl.TEXTURE_2D, objectTexture[c]);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
     //Bind VAO
@@ -611,39 +610,35 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   gl.enableVertexAttribArray(coAtt);
   /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4), 
   offset (must be a multiple of the type)*/
-  //Stride: 3*vertex, 2*uv, 3*normal,3*bary
-  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 11 * 4, 4);
+  //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
+  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 12 * 4, 4);
 
-  texHAX.push(loadTexture("Model/tex/" + texture["name"]));
+  objectTexture.push(loadTexture("Model/tex/" + texture["name"]));
 
   var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
   gl.enableVertexAttribArray(uvAtt);
-  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 11 * 4, 4 + 3 * 4);
+  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 12 * 4, 4 + 3 * 4);
 
   var noAtt = gl.getAttribLocation(shaderProgram, "a_normal");
   gl.enableVertexAttribArray(noAtt);
-  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 11 * 4, 4 + 3 * 4 + 2 * 4);
+  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4);
 
   var baryAtt = gl.getAttribLocation(shaderProgram, "a_bary");
   gl.enableVertexAttribArray(baryAtt);
-  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, true, 11 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
+  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
+
+  var boneAtt = gl.getAttribLocation(shaderProgram, "a_bone");
+  gl.enableVertexAttribArray(boneAtt);
+  gl.vertexAttribPointer(boneAtt, 1, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4 + 3 * 4);
 
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
-
-  //TODO support more attributes
-
-  //if (textureCoords != -1) {
-  //  createVBO(textureCoords);
-  //  setAttribute(textureCoordsAttribute, 2);
-  //}
-  //createTexture(texture["name"], gl.getAttribLocation(shaderProgram, texture["loc"]), texture["vertices"]);
 
   vaoExt.bindVertexArrayOES(null);
 
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: (object.length - (2 * (object.length / 11)) - (3 * (object.length / 11)) - (3 * (object.length / 11))), //Subtract the UVs, subtract the vertex normals
+    bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
     uniforms: gl.getUniformLocation(shaderProgram, uniformName)
   };
 }
@@ -674,12 +669,15 @@ function initCanvas(canvasName) {
   window.addEventListener("keyup", keyboardHandlerUp);
   window.addEventListener("wheel", scrollHandler);
   window.addEventListener("mousemove", mouseHandler);
+  window.addEventListener("click", mouseClickHandler);
+
   glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
     glcanvas.mozRequestPointerLock ||
     glcanvas.webkitRequestPointerLock;
   window.addEventListener("click", () => {
     glcanvas.requestPointerLock();
   });
+
 }
 
 /**
@@ -706,6 +704,40 @@ function initWebGL(canvas) {
   }
 
   return gl;
+}
+
+
+
+function debugReadModel() {
+  // Check for the various File API support.
+  if (window.File && window.FileReader && window.FileList && window.Blob) {
+    // Setup the dnd listeners.
+    var dropZone = document.getElementById('glcanvas');
+    dropZone.addEventListener('dragover', handleDragOver, false);
+    dropZone.addEventListener('drop', handleFileSelect, false);
+  } else {
+    alert('The File APIs are not fully supported in this browser.');
+  }
+}
+
+function handleFileSelect(evt) {
+  evt.stopPropagation();
+  evt.preventDefault();
+
+  var files = evt.dataTransfer.files; // FileList object.
+  var reader = new FileReader();
+  reader.addEventListener("load",data=>{
+    //Sorry
+    eval(data.target.result);
+    start();
+  });
+  reader.readAsText(files[0]);
+}
+
+function handleDragOver(evt) {
+  evt.stopPropagation();
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = 'copy'; // Explicitly show this is a copy.
 }
 
 function keyboardHandlerDown(keyboardEvent) {
@@ -757,4 +789,9 @@ function scrollHandler(scrollEvent) {
 function mouseHandler(mouseEvent) {
   yaw -= mouseEvent.movementX / 10;
   pitch -= mouseEvent.movementY / 10;
+}
+
+function mouseClickHandler(mouseEvent) {
+  //http://www.opengl-tutorial.org/miscellaneous/clicking-on-objects/picking-with-an-opengl-hack/
+  //http://stackoverflow.com/questions/21841483/webgl-using-framebuffers-for-picking-multiple-objects
 }
