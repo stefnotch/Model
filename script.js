@@ -1,11 +1,15 @@
 /*
 git commit -am "your message goes here"
-git push 
+git push
 */
 /*global model*/
-
+/*global bones*/
 //Uses http://threejs.org/editor/
-/*TODO 
+/*TODO
+Edit the texture at runtime (Color and edge detection)
+Rotate the vertex normals (skelly animation)
+Copy over the pos coordinates if the child doesn't have them!
+Matrix multiplication library, they are doing everything that I can do, and better
 bones
 Rotating light source
 hide object upon click
@@ -22,14 +26,12 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-0.9248072232763789, -70, -56.26606595458085],
+var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257 ],
   velocity = [0, 0, 0];
-//-0.6695563612951321, -6.247855263929647, -32.9644536444527
-//-13.74153029749956, 119.80755982476153, -184.15868065037967
+
 //Rotation
-//var rotation = [0, 0, 0];
-var pitch = -278,
-  yaw = -720; //15,5
+var pitch = -364,
+  yaw = -1085; //15,5
 //50, 0
 var scale = 0.05;
 
@@ -39,18 +41,18 @@ var transparentObjectsToDraw = [];
 
 var drawDragon = true;
 
-var celLineShader1;
-var celLineShaderMatrixUniform1;
+var celLineShader;
+var celLineShaderMatrixUniform;
 var celLineShaderWidthUniform;
-
+var celLineShaderBoneUniform;
 //TODO Move to addObjectsToDraw
 var objectTexture = [];
-
-var MatMath = {
+var boneHAX;
+var Mat4 = {
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
   },
-  rotationXMatrix: function(angle) {
+  rotX: function(angle) {
     var angleInRadians = angle * Math.PI / 180;
     var c = Math.cos(angleInRadians);
     var s = Math.sin(angleInRadians);
@@ -61,7 +63,7 @@ var MatMath = {
       0, 0, 0, 1
     ];
   },
-  rotationYMatrix: function(angle) {
+  rotY: function(angle) {
     var angleInRadians = angle * Math.PI / 180;
     var c = Math.cos(angleInRadians);
     var s = Math.sin(angleInRadians);
@@ -72,7 +74,7 @@ var MatMath = {
       0, 0, 0, 1
     ];
   },
-  rotationZMatrix: function(angle) {
+  rotZ: function(angle) {
     var angleInRadians = angle * Math.PI / 180;
     var c = Math.cos(angleInRadians);
     var s = Math.sin(angleInRadians);
@@ -83,7 +85,7 @@ var MatMath = {
       0, 0, 0, 1
     ];
   },
-  translationMatrix: function(tx, ty, tz) {
+  translation: function(tx, ty, tz) {
     return [
       1, 0, 0, 0,
       0, 1, 0, 0,
@@ -91,7 +93,7 @@ var MatMath = {
       tx, ty, tz, 1
     ];
   },
-  scaleMatrix: function(scale) {
+  scale: function(scale) {
     return [
       1, 0, 0, 0,
       0, 1, 0, 0,
@@ -99,7 +101,7 @@ var MatMath = {
       0, 0, 0, scale
     ];
   },
-  scaleDimensionsMatrix: function(scaleX, scaleY, scaleZ) {
+  scaleDimensions: function(scaleX, scaleY, scaleZ) {
     return [
       scaleX, 0, 0, 0,
       0, scaleY, 0, 0,
@@ -107,14 +109,14 @@ var MatMath = {
       0, 0, 0, 1
     ];
   },
-  perspectiveMatrix: function(fudgeFactor) {
+  perspective: function(fudgeFactor) {
     //z to w
     return [
       1, 0, 0, 0,
       0, 1, 0, 0,
       0, 0, 1, fudgeFactor,
       0, 0, 0, 1,
-    ]
+    ];
   },
   makePerspective: function(fieldOfViewInRadians, aspect, near, far) {
     var f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians);
@@ -262,25 +264,29 @@ var MatMath = {
 
 //Called by the body
 function start() {
-  
+
   initCanvas("glcanvas");
 
   //Init WebGL
   gl = initWebGL(glcanvas);
 
   if (gl) {
-    //calculateExtendersAndLines();
+    setUpBones();
     vaoExt = gl.getExtension("OES_vertex_array_object");
-
+    //Standard derivatives
+    gl.getExtension("OES_standard_derivatives");
     var celLineVertexShader = createShader(`
     attribute vec3 a_coordinate;
     attribute vec3 a_normal;
+    attribute float a_bone;
+    
     uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
+    uniform mat4 u_bones[32]; //32 bones can be moved
     
     void main(void){
-      gl_Position = u_matrix * vec4(a_coordinate + a_normal * u_width, 1);
-      
+      gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate + a_normal * u_width, 1);
+
     }`, gl.VERTEX_SHADER);
 
     var celLineFragmentShader = createShader(`
@@ -290,48 +296,63 @@ function start() {
       gl_FragColor = vec4(0,0,0, 1);  // black
     }`, gl.FRAGMENT_SHADER);
 
-    celLineShader1 = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+    celLineShader = createShaderProgram(celLineVertexShader, celLineFragmentShader);
 
-    celLineShaderMatrixUniform1 = gl.getUniformLocation(celLineShader1, "u_matrix");
-    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader1, "u_width");
-
+    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader, "u_matrix");
+    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader, "u_width");
+    celLineShaderBoneUniform = gl.getUniformLocation(celLineShader, "u_bones");
 
     var vertexShader = createShader(`
     attribute vec3 a_coordinate;
     attribute vec3 a_normal;
+    attribute float a_bone;
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
-    attribute float a_bone;
     uniform mat4 u_matrix; //The Matrix!
-    
+    uniform mat4 u_bones[32]; //32 bones can be moved
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
-    
+
     void main(void){
-      gl_Position = u_matrix * vec4(a_coordinate + vec3(a_bone) * 10.0, 1);
+      
+      gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate, 1);
+      
+      if(a_bone == -1.0){
+        gl_Position = vec4(a_coordinate.xy,10, 1);
+      }
+      
       v_textureCoord = a_texcoord;
       v_normal = a_normal;
       v_bary = a_bary;
     }`, gl.VERTEX_SHADER);
 
+
+    //Anime has exactly 2 different shadings, light OR dark
     var fragmentShader = createShader(`
+    #extension GL_OES_standard_derivatives : enable
     precision mediump float;
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
     uniform sampler2D u_texture;
-
+    
+   float edgeFactor(){
+      vec3 d = fwidth(v_bary);
+      //OMG, it's working
+      vec3 a3 = step(d*20.0*gl_FragCoord.w, v_bary);
+      //step(d*10.0, v_bary); //clamp(v_bary/d/10.0, 0.0,1.0);//smoothstep(vec3(0.0), d*10.95, v_bary);
+      return min(min(a3.x, a3.y), a3.z);
+    }
+    
     void main() {
     if(any(lessThan(v_bary, vec3(0.02)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
       }else{
-        float light = dot(v_normal, normalize(vec3(-1,0,0)));
-        if(light <= 1.0/16.0 * 2.0){
+        float light = dot(v_normal, normalize(vec3(1,-0.5,-0.3)));
+        if(light <= 1.0/16.0 * 7.0){
           light = 0.5;
-        }else if(light <= 1.0/16.0 * 7.0){
-          light = 0.4;
-        }else{
+        } else {
           light = 0.3;
         }
         vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
@@ -346,7 +367,7 @@ function start() {
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-
+    boneHAX = gl.getUniformLocation(shaderProgram, "u_bones");
     for (var i = 0; i < model.length; i++) {
       addObjectToDraw(shaderProgram, model[i], "u_matrix", {
         name: model[i][0],
@@ -356,10 +377,6 @@ function start() {
     //model = null;
 
     //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
-    //loadTexture("https://i.imgur.com/PxWbS.gif");
-
-    //loadTexture("waterAni.gif");
-    //loadTexture("https://slm-assets2.secondlife.com/assets/5553970/lightbox/3974332-blue-seamless-water-ripple-texture.jpg?1336696546");
     // Everything we need has now been copied to the graphics
     // hardware, so we can start drawing
 
@@ -381,12 +398,13 @@ function redraw() {
   pos[1] += velocity[1];
   pos[2] += velocity[2];
 
+  var camMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
+  camMat = Mat4.multiply(camMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
+  var viewMat = Mat4.makeInverseCrap(camMat);
 
-  var camMat = MatMath.multiply(MatMath.rotationXMatrix(pitch), MatMath.rotationYMatrix(yaw));
-  camMat = MatMath.multiply(camMat, MatMath.translationMatrix(-pos[0], -pos[1], -pos[2]));
-  var viewMat = MatMath.makeInverseCrap(camMat);
+  var boneMat = calculateBones();
 
-  var matrix = MatMath.multiply(viewMat, MatMath.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
+  var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
   gl.disable(gl.BLEND);
 
   gl.cullFace(gl.FRONT);
@@ -395,15 +413,16 @@ function redraw() {
   //Check what is faster: moving this into the other loop or leaving it this way
   objectsToDraw.forEach((object) => {
     //What shader program
-    gl.useProgram(celLineShader1);
+    gl.useProgram(celLineShader);
     //Uniforms such as the matrix
-    gl.uniformMatrix4fv(celLineShaderMatrixUniform1, false, matrix);
+    gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
+    gl.uniformMatrix4fv(celLineShaderBoneUniform, false, boneMat);
     gl.uniform1f(celLineShaderWidthUniform, 0.1);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the outlines
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);  
+    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //vaoExt.bindVertexArrayOES(null);
   });
 
   gl.disable(gl.CULL_FACE);
@@ -416,6 +435,7 @@ function redraw() {
     gl.bindTexture(gl.TEXTURE_2D, objectTexture[c]);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms, false, matrix);
+    gl.uniformMatrix4fv(boneHAX, false, boneMat);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
 
@@ -445,11 +465,42 @@ function redraw() {
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the object
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);  
+    //vaoExt.bindVertexArrayOES(null);
   });*/
   window.requestAnimationFrame(redraw);
 }
 
+function calculateBones() {
+  //http://webglfundamentals.org/webgl/lessons/resources/person-diagram.html
+  var boneMat = [];
+  for (var i = 0; i < bones.length; i++) {
+    //Rotation matrix
+    var rotMat = Mat4.multiply(Mat4.multiply(
+        Mat4.rotX(bones[i].rot[0]),
+        Mat4.rotY(bones[i].rot[1])),
+      Mat4.rotZ(bones[i].rot[2]));
+
+    //The local matrix of the bone
+    var localMat =
+      Mat4.multiply(
+        Mat4.multiply(
+          Mat4.translation(-bones[i].pos[0], -bones[i].pos[1], -bones[i].pos[2]),
+          rotMat),
+        Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2]));
+
+    //MatMath.translationMatrix(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+    //Root bone
+    if (bones[i].parent == -1) {
+      bones[i].worldMat = localMat;
+    } else {
+      bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat, localMat);
+    }
+
+    boneMat[bones[i].index] = bones[i].worldMat;
+  }
+
+  return [].concat.apply([], boneMat);
+}
 /**
  * Loads a texture from a URL
  */
@@ -457,17 +508,20 @@ function loadTexture(textureLocation) {
   // Create a texture.
   var texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  // Fill the texture with a 1x1 blue pixel.
+  //TODO
+  var tex = textureLocation.split(";");
+  if (textureLocation.indexOf("nonexistent.png") > -1) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([+tex[1] * 255, +tex[2]  * 255, +tex[3]  * 255, 255]));
+    return texture;
+  }else{
+    // Fill the texture with a 1x1 blue pixel.
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
     new Uint8Array([0, 0, 255, 255]));
-  if (textureLocation.endsWith("nonexistent.png")) {
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      new Uint8Array([255, 255, 255, 255]));
-    return texture;
   }
   // Asynchronously load an image
   var image = new Image();
-  image.src = textureLocation;
+  image.src = tex[0];
 
   image.addEventListener('load', function() {
     var mips = false;
@@ -514,7 +568,7 @@ function nextHighestPowerOfTwo(x) {
   }
   return x + 1;
 }
-/** 
+/**
  * Creates and uploads a VBO to the GPU
  */
 function createVBO(vertices) {
@@ -529,7 +583,7 @@ function createVBO(vertices) {
 }
 /**
  * Creates a buffer and attributes
- * 
+ *
  */
 function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER, numComponents = 3, stride = 0, offset = 0) {
 
@@ -599,7 +653,7 @@ function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize =
 function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
-  // Start setting up VAO  
+  // Start setting up VAO
   vaoExt.bindVertexArrayOES(vao);
   //Create a VBO
   var buffer = gl.createBuffer();
@@ -608,7 +662,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
   //CO, UV, NORMALS
   var coAtt = gl.getAttribLocation(shaderProgram, "a_coordinate");
   gl.enableVertexAttribArray(coAtt);
-  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4), 
+  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
   offset (must be a multiple of the type)*/
   //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
   gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 12 * 4, 4);
@@ -625,7 +679,7 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
 
   var baryAtt = gl.getAttribLocation(shaderProgram, "a_bary");
   gl.enableVertexAttribArray(baryAtt);
-  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
+  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, false, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
 
   var boneAtt = gl.getAttribLocation(shaderProgram, "a_bone");
   gl.enableVertexAttribArray(boneAtt);
@@ -706,8 +760,39 @@ function initWebGL(canvas) {
   return gl;
 }
 
-
-
+function setUpBones() {
+  for (var i = 0; i < bones.length; i++) {
+    var copyParentPos = false;
+    if (bones[i].rot == undefined) {
+      bones[i].rot = [0, 0, 0];
+    }
+    if (bones[i].pos == undefined) {
+      bones[i].pos = [0, 0, 0];
+    } else if (bones[i].pos == "parent") {
+      copyParentPos = true;
+    }
+    //If the bone's parent is given as a string
+    if (typeof bones[i].parent == "string") {
+      //Loop over the other bones and find the parent
+      for (var j = 0; j < bones.length; j++) {
+        if (bones[j].name == bones[i].parent) {
+          bones[i].parent = j;
+          if (copyParentPos) {
+            bones[i].pos = bones[j].pos;
+          }
+          //If the parent comes after the child, something is wrong
+          if (j >= i) {
+            throw new Error("Bone parent after child!" + j);
+          }
+          break;
+        }
+      }
+    }
+  }
+}
+/**
+ * For quickly loading a locally stored model
+ */
 function debugReadModel() {
   // Check for the various File API support.
   if (window.File && window.FileReader && window.FileList && window.Blob) {
@@ -726,7 +811,7 @@ function handleFileSelect(evt) {
 
   var files = evt.dataTransfer.files; // FileList object.
   var reader = new FileReader();
-  reader.addEventListener("loadend",data=>{
+  reader.addEventListener("loadend", data => {
     //Sorry
     eval(data.target.result);
     start();
@@ -741,22 +826,26 @@ function handleDragOver(evt) {
 }
 
 function keyboardHandlerDown(keyboardEvent) {
-  var yawRad = MatMath.degToRad(yaw);
-  var pitchRad = MatMath.degToRad(pitch);
+  var yawRad = Mat4.degToRad(yaw);
+  var pitchRad = Mat4.degToRad(pitch);
   switch (keyboardEvent.code) {
+    case "KeyW":
     case "ArrowUp":
       velocity[0] = Math.sin(yawRad) * Math.cos(pitchRad);
       velocity[1] = -Math.sin(pitchRad);
       velocity[2] = Math.cos(yawRad) * Math.cos(pitchRad);
       break;
+    case "KeyS":
     case "ArrowDown":
       velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
       velocity[1] = Math.sin(pitchRad);
       velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
       break;
+    case "KeyA":
     case "ArrowLeft":
       yaw++;
       break;
+    case "KeyD":
     case "ArrowRight":
       yaw--;
       break;
@@ -765,6 +854,8 @@ function keyboardHandlerDown(keyboardEvent) {
 
 function keyboardHandlerUp(keyboardEvent) {
   switch (keyboardEvent.code) {
+    case "KeyW":
+    case "KeyS":
     case "ArrowUp":
     case "ArrowDown":
       velocity[0] = 0;
