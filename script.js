@@ -26,14 +26,15 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257 ],
-  velocity = [0, 0, 0];
+var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257],
+  velocity = [0, 0, 0],
+  speed = 1;
 
 //Rotation
 var pitch = -364,
   yaw = -1085; //15,5
 //50, 0
-var scale = 0.05;
+var light = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
 
@@ -272,13 +273,15 @@ function start() {
 
   if (gl) {
     setUpBones();
+    //setUpShadowMap();
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
     var celLineVertexShader = createShader(`
     attribute vec3 a_coordinate;
-    attribute vec3 a_normal;
     attribute float a_bone;
+    attribute vec3 a_normal;
+    
     
     uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
@@ -304,8 +307,8 @@ function start() {
 
     var vertexShader = createShader(`
     attribute vec3 a_coordinate;
-    attribute vec3 a_normal;
     attribute float a_bone;
+    attribute vec3 a_normal;
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
     uniform mat4 u_matrix; //The Matrix!
@@ -315,7 +318,6 @@ function start() {
     varying vec3 v_bary;
 
     void main(void){
-      
       gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate, 1);
       
       if(a_bone == -1.0){
@@ -323,7 +325,7 @@ function start() {
       }
       
       v_textureCoord = a_texcoord;
-      v_normal = a_normal;
+      v_normal = vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
       v_bary = a_bary;
     }`, gl.VERTEX_SHADER);
 
@@ -335,21 +337,14 @@ function start() {
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
+    uniform vec3 u_light;
     uniform sampler2D u_texture;
     
-   float edgeFactor(){
-      vec3 d = fwidth(v_bary);
-      //OMG, it's working
-      vec3 a3 = step(d*20.0*gl_FragCoord.w, v_bary);
-      //step(d*10.0, v_bary); //clamp(v_bary/d/10.0, 0.0,1.0);//smoothstep(vec3(0.0), d*10.95, v_bary);
-      return min(min(a3.x, a3.y), a3.z);
-    }
-    
     void main() {
-    if(any(lessThan(v_bary, vec3(0.02)))){
+    if(any(lessThan(v_bary, vec3(0.06)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
       }else{
-        float light = dot(v_normal, normalize(vec3(1,-0.5,-0.3)));
+        float light = dot(v_normal, normalize(u_light));
         if(light <= 1.0/16.0 * 7.0){
           light = 0.5;
         } else {
@@ -369,7 +364,7 @@ function start() {
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
     boneHAX = gl.getUniformLocation(shaderProgram, "u_bones");
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw(shaderProgram, model[i], "u_matrix", {
+      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light"], {
         name: model[i][0],
       });
     }
@@ -394,9 +389,9 @@ function start() {
 function redraw() {
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-  pos[0] += velocity[0];
-  pos[1] += velocity[1];
-  pos[2] += velocity[2];
+  pos[0] += velocity[0] * speed;
+  pos[1] += velocity[1] * speed;
+  pos[2] += velocity[2] * speed;
 
   var camMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
   camMat = Mat4.multiply(camMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
@@ -434,7 +429,8 @@ function redraw() {
     gl.useProgram(object.shaderProgram);
     gl.bindTexture(gl.TEXTURE_2D, objectTexture[c]);
     //Uniforms such as the matrix
-    gl.uniformMatrix4fv(object.uniforms, false, matrix);
+    gl.uniformMatrix4fv(object.uniforms["u_matrix"], false, matrix);
+    gl.uniform3fv(object.uniforms["u_light"], light);
     gl.uniformMatrix4fv(boneHAX, false, boneMat);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
@@ -512,12 +508,12 @@ function loadTexture(textureLocation) {
   var tex = textureLocation.split(";");
   if (textureLocation.indexOf("nonexistent.png") > -1) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      new Uint8Array([+tex[1] * 255, +tex[2]  * 255, +tex[3]  * 255, 255]));
+      new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
     return texture;
-  }else{
+  } else {
     // Fill the texture with a 1x1 blue pixel.
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-    new Uint8Array([0, 0, 255, 255]));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([0, 0, 255, 255]));
   }
   // Asynchronously load an image
   var image = new Image();
@@ -650,7 +646,7 @@ function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize =
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(shaderProgram, object, uniformName, texture) {
+function createObjectToDraw(shaderProgram, object, uniformNames, texture) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -689,17 +685,21 @@ function createObjectToDraw(shaderProgram, object, uniformName, texture) {
 
   vaoExt.bindVertexArrayOES(null);
 
+  var uniforms = [];
+  uniformNames.forEach(s => {
+    uniforms[s] = gl.getUniformLocation(shaderProgram, s);
+  });
   return {
     shaderProgram: shaderProgram,
     vao: vao,
     bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
-    uniforms: gl.getUniformLocation(shaderProgram, uniformName)
+    uniforms: uniforms
   };
 }
 
-function addObjectToDraw(shaderProgram, object, uniformName, texture) {
+function addObjectToDraw(shaderProgram, object, uniformNames, texture) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, object, uniformName, texture));
+    createObjectToDraw(shaderProgram, object, uniformNames, texture));
 }
 
 function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
@@ -874,7 +874,7 @@ function keyboardHandlerUp(keyboardEvent) {
 }
 
 function scrollHandler(scrollEvent) {
-  scale += scrollEvent.deltaY / 100000;
+  speed -= scrollEvent.deltaY / 100;
 }
 
 function mouseHandler(mouseEvent) {
