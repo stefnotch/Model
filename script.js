@@ -2,7 +2,7 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model bones setUpShadowMap renderShadows depthTexture*/
+/*global model bones*/
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
 /*TODO
@@ -273,7 +273,6 @@ function start() {
 
   if (gl) {
     setUpBones();
-    setUpShadowMap();
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
@@ -312,12 +311,10 @@ function start() {
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
     uniform mat4 u_matrix; //The Matrix!
-    uniform mat4 u_lightMat;
     uniform mat4 u_bones[32]; //32 bones can be moved
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
-    varying vec4 v_shadowCoord;
 
     void main(void){
       vec4 vertPos = u_bones[int(a_bone)] * vec4(a_coordinate, 1);
@@ -326,7 +323,6 @@ function start() {
       v_textureCoord = a_texcoord;
       v_normal = vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
       v_bary = a_bary;
-      v_shadowCoord = u_lightMat * vertPos;
     }`, gl.VERTEX_SHADER);
 
 
@@ -337,11 +333,9 @@ function start() {
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
-    varying vec4 v_shadowCoord;
     uniform vec3 u_light;
     uniform sampler2D u_texture;
-    uniform sampler2D u_shadowTexture;
-    
+
     void main() {
     if(any(lessThan(v_bary, vec3(0.06)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -354,12 +348,6 @@ function start() {
           light = 0.3;
         }
         
-        float bias = 0.005;
-        float visibility = 1.0;
-        if (texture2D( u_shadowTexture, v_shadowCoord.xy ).z  <  v_shadowCoord.z-bias){
-          light = 0.3;
-        }
-
         vec3 src = vec3(texture2D(u_texture, v_textureCoord));
         
         gl_FragColor = vec4(src * 2.0 * light,1);
@@ -373,9 +361,9 @@ function start() {
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_lightMat", "u_bones"], {
+      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_bones"], {
         locations: [model[i][0]],
-        uniforms: ["u_texture", "u_shadowTexture"]
+        uniforms: ["u_texture"]
       });
     }
     //Get rid of model, make it easier for the garbage collector
@@ -409,15 +397,6 @@ function redraw() {
   //Projection matrix => Mat4.makePerspective
   var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
   var boneMat = calculateBones();
-  var lightMat = calculateMatrix(lightPos, lightRot, false);
-  //Fixing the coordinates [-1,1] => texture sampling must be done in [0,1]
-  lightMat = Mat4.multiply(lightMat, [0.5, 0.0, 0.0, 0.0,
-    0.0, 0.5, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.0,
-    0.5, 0.5, 0.5, 1.0
-  ])
-  renderShadows(lightMat, objectsToDraw, boneMat);
-
   //
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND);
@@ -454,7 +433,6 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms["u_matrix"], false, matrix);
     gl.uniform3fv(object.uniforms["u_light"], lightRot);
-    gl.uniformMatrix4fv(object.uniforms["u_lightMat"], false, lightMat);
     gl.uniformMatrix4fv(object.uniforms["u_bones"], false, boneMat);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
@@ -519,21 +497,6 @@ function calculateBones() {
   }
 
   return [].concat.apply([], boneMat);
-}
-
-function calculateMatrix(pos, rot, hasPerspective) {
-  var modelMat = Mat4.multiply(Mat4.multiply(Mat4.rotX(rot[0]), Mat4.rotY(rot[1])), Mat4.rotZ(rot[2]));
-  modelMat = Mat4.multiply(modelMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
-  var viewMat = Mat4.makeInverseCrap(modelMat);
-
-  //Model-View-Projection matrix
-  //Might work
-  return Mat4.multiply(viewMat, [
-      1 / glcanvas.clientWidth / glcanvas.clientHeight, 0, 0, 0,
-      0, 1, 0, 0,
-      0, 0, (0.5 + 100) * 1.0 / (0.5 - 100), 0,
-      0, 0, 0.5 * 100 * 1.0 / (0.5 - 100) * 2, 0
-    ]);
 }
 
 /**
