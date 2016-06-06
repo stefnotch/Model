@@ -2,10 +2,11 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model*/
-/*global bones*/
-//Uses http://threejs.org/editor/
+/*global model bones setUpShadowMap renderShadows depthTexture*/
+//https://www.opengl.org/wiki/Performance
+//http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
 /*TODO
+Create class for shader programs
 Edit the texture at runtime (Color and edge detection)
 Rotate the vertex normals (skelly animation)
 Copy over the pos coordinates if the child doesn't have them!
@@ -34,7 +35,8 @@ var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257],
 var pitch = -364,
   yaw = -1085; //15,5
 //50, 0
-var light = [1, -0.5, -0.3];
+var lightRot = [1, -0.5, -0.3],
+  lightPos = [1*10, -0.5*10, -0.3*10];
 
 var objectsToDraw = [];
 
@@ -46,9 +48,7 @@ var celLineShader;
 var celLineShaderMatrixUniform;
 var celLineShaderWidthUniform;
 var celLineShaderBoneUniform;
-//TODO Move to addObjectsToDraw
-var objectTexture = [];
-var boneHAX;
+
 var Mat4 = {
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
@@ -273,7 +273,7 @@ function start() {
 
   if (gl) {
     setUpBones();
-    //setUpShadowMap();
+    setUpShadowMap();
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
@@ -312,21 +312,21 @@ function start() {
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
     uniform mat4 u_matrix; //The Matrix!
+    uniform mat4 u_lightMat;
     uniform mat4 u_bones[32]; //32 bones can be moved
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
+    varying vec4 v_shadowCoord;
 
     void main(void){
-      gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate, 1);
-      
-      if(a_bone == -1.0){
-        gl_Position = vec4(a_coordinate.xy,10, 1);
-      }
+      vec4 vertPos = u_bones[int(a_bone)] * vec4(a_coordinate, 1);
+      gl_Position = u_matrix * vertPos;
       
       v_textureCoord = a_texcoord;
       v_normal = vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
       v_bary = a_bary;
+      v_shadowCoord = u_lightMat * vertPos;
     }`, gl.VERTEX_SHADER);
 
 
@@ -337,35 +337,45 @@ function start() {
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
+    varying vec4 v_shadowCoord;
     uniform vec3 u_light;
     uniform sampler2D u_texture;
+    uniform sampler2D u_shadowTexture;
     
     void main() {
     if(any(lessThan(v_bary, vec3(0.06)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
       }else{
+      //step?
         float light = dot(v_normal, normalize(u_light));
         if(light <= 1.0/16.0 * 7.0){
           light = 0.5;
-        } else {
+        }else{
           light = 0.3;
         }
-        vec3 src = vec3(texture2D(u_texture, v_textureCoord));//vec3(1,1,1);
-        if(light <= 0.5){
-          gl_FragColor = vec4(src * 2.0 * light,1);
-        }else{
-          gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.x)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
+        
+        float bias = 0.005;
+        float visibility = 1.0;
+        if (texture2D( u_shadowTexture, v_shadowCoord.xy ).z  <  v_shadowCoord.z-bias){
+          light = 0.3;
         }
+
+        vec3 src = vec3(texture2D(u_texture, v_textureCoord));
+        
+        gl_FragColor = vec4(src * 2.0 * light,1);
+        //if(light > 0.5){
+        //gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
+        
       }
     }`, gl.FRAGMENT_SHADER);
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
-    boneHAX = gl.getUniformLocation(shaderProgram, "u_bones");
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light"], {
-        name: model[i][0],
+      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_lightMat", "u_bones"], {
+        locations: [model[i][0]],
+        uniforms: ["u_texture", "u_shadowTexture"]
       });
     }
     //Get rid of model, make it easier for the garbage collector
@@ -387,19 +397,29 @@ function start() {
  * Draw loop
  */
 function redraw() {
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
   pos[0] += velocity[0] * speed;
   pos[1] += velocity[1] * speed;
   pos[2] += velocity[2] * speed;
 
-  var camMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
-  camMat = Mat4.multiply(camMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
-  var viewMat = Mat4.makeInverseCrap(camMat);
+  var modelMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
+  modelMat = Mat4.multiply(modelMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
+  var viewMat = Mat4.makeInverseCrap(modelMat);
 
-  var boneMat = calculateBones();
 
+  //Projection matrix => Mat4.makePerspective
   var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
+  var boneMat = calculateBones();
+  var lightMat = calculateMatrix(lightPos, lightRot, false);
+  //Fixing the coordinates [-1,1] => texture sampling must be done in [0,1]
+  lightMat = Mat4.multiply(lightMat, [0.5, 0.0, 0.0, 0.0,
+    0.0, 0.5, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.5, 0.5, 0.5, 1.0
+  ])
+  renderShadows(lightMat, objectsToDraw, boneMat);
+
+  //
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND);
 
   gl.cullFace(gl.FRONT);
@@ -416,33 +436,36 @@ function redraw() {
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the outlines
-    //gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);
   });
 
-  gl.disable(gl.CULL_FACE);
+  gl.cullFace(gl.BACK);
 
-  var c = 0;
-  //gl.enable(gl.CULL_FACE);
   objectsToDraw.forEach((object) => {
     //What shader program
     gl.useProgram(object.shaderProgram);
-    gl.bindTexture(gl.TEXTURE_2D, objectTexture[c]);
+    for (var i = 0; i < object.textures.length; i++) {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.uniform1i(object.textureUniforms[i], i);
+      gl.bindTexture(gl.TEXTURE_2D, object.textures[i]);
+    }
+
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.uniforms["u_matrix"], false, matrix);
-    gl.uniform3fv(object.uniforms["u_light"], light);
-    gl.uniformMatrix4fv(boneHAX, false, boneMat);
+    gl.uniform3fv(object.uniforms["u_light"], lightRot);
+    gl.uniformMatrix4fv(object.uniforms["u_lightMat"], false, lightMat);
+    gl.uniformMatrix4fv(object.uniforms["u_bones"], false, boneMat);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
 
     //Draw the object
     if (drawDragon)
       gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    c++;
   });
 
 
-  //gl.disable(gl.CULL_FACE);
+  gl.disable(gl.CULL_FACE);
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
   //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -497,60 +520,86 @@ function calculateBones() {
 
   return [].concat.apply([], boneMat);
 }
+
+function calculateMatrix(pos, rot, hasPerspective) {
+  var modelMat = Mat4.multiply(Mat4.multiply(Mat4.rotX(rot[0]), Mat4.rotY(rot[1])), Mat4.rotZ(rot[2]));
+  modelMat = Mat4.multiply(modelMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
+  var viewMat = Mat4.makeInverseCrap(modelMat);
+
+  //Model-View-Projection matrix
+  //Might work
+  return Mat4.multiply(viewMat, [
+      1 / glcanvas.clientWidth / glcanvas.clientHeight, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, (0.5 + 100) * 1.0 / (0.5 - 100), 0,
+      0, 0, 0.5 * 100 * 1.0 / (0.5 - 100) * 2, 0
+    ]);
+}
+
 /**
  * Loads a texture from a URL
  */
-function loadTexture(textureLocation) {
-  // Create a texture.
-  var texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  //TODO
-  var tex = textureLocation.split(";");
-  if (textureLocation.indexOf("nonexistent.png") > -1) {
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
-    return texture;
-  } else {
-    // Fill the texture with a 1x1 blue pixel.
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-      new Uint8Array([0, 0, 255, 255]));
-  }
-  // Asynchronously load an image
-  var image = new Image();
-  image.src = tex[0];
+function loadTextures(textureLocations) {
+  var prefix = "Model/tex/"
 
-  image.addEventListener('load', function() {
-    var mips = false;
-    //Bind the texture
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-      if (image.width == image.height) {
-        // Scale up the texture to the next highest power of two dimensions.
-        var canvas = document.createElement("canvas");
-        canvas.width = nextHighestPowerOfTwo(image.width);
-        canvas.height = nextHighestPowerOfTwo(image.height);
-        var ctx = canvas.getContext("2d");
-        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-        image = canvas;
-        mips = true;
+  var returnTextures = [];
+  for (var i = 0; i < textureLocations.length; i++) {
+    if (typeof textureLocations[i] == "string") {
+      // Create a texture.
+      var texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      var tex = textureLocations[i].split(";");
+      //If it is a nonexistent texture
+      if (textureLocations[i].indexOf("nonexistent.png") > -1) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+          new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
+        return texture;
       } else {
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        //No mipmaps
+        // Fill the texture with a 1x1 blue pixel.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+          new Uint8Array([0, 0, 255, 255]));
       }
+      // Asynchronously load an image
+      var image = new Image();
+      image.src = prefix + tex[0];
+
+      image.addEventListener('load', function() {
+        var mips = false;
+        //Bind the texture
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
+          if (image.width == image.height) {
+            // Scale up the texture to the next highest power of two dimensions.
+            var canvas = document.createElement("canvas");
+            canvas.width = nextHighestPowerOfTwo(image.width);
+            canvas.height = nextHighestPowerOfTwo(image.height);
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            image = canvas;
+            mips = true;
+          } else {
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            //No mipmaps
+          }
+        } else {
+          //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+          mips = true;
+        }
+        // Now that the image has loaded make copy it to the texture.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        if (mips) {
+          //Generate some mipmaps!
+          gl.generateMipmap(gl.TEXTURE_2D);
+        }
+      });
+      returnTextures.push(texture);
     } else {
-      //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-      mips = true;
+      returnTextures.push(textureLocations[i]);
     }
-    // Now that the image has loaded make copy it to the texture.
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    if (mips) {
-      //Generate some mipmaps!
-      gl.generateMipmap(gl.TEXTURE_2D);
-    }
-  });
-  return texture;
+  }
+  return returnTextures;
 }
 
 function isPowerOfTwo(x) {
@@ -646,7 +695,7 @@ function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize =
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(shaderProgram, object, uniformNames, texture) {
+function createObjectToDraw(shaderProgram, object, uniformNames, textures) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -662,8 +711,6 @@ function createObjectToDraw(shaderProgram, object, uniformNames, texture) {
   offset (must be a multiple of the type)*/
   //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
   gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 12 * 4, 4);
-
-  objectTexture.push(loadTexture("Model/tex/" + texture["name"]));
 
   var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
   gl.enableVertexAttribArray(uvAtt);
@@ -683,23 +730,33 @@ function createObjectToDraw(shaderProgram, object, uniformNames, texture) {
 
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
-  vaoExt.bindVertexArrayOES(null);
 
   var uniforms = [];
   uniformNames.forEach(s => {
     uniforms[s] = gl.getUniformLocation(shaderProgram, s);
   });
+
+  var textureUniforms = [];
+  for (var i = 0; i < textures.uniforms.length; i++) {
+    //Shader program texture index
+    textureUniforms.push(gl.getUniformLocation(shaderProgram, textures.uniforms[i]), i);
+  }
+
+  vaoExt.bindVertexArrayOES(null);
+
   return {
     shaderProgram: shaderProgram,
     vao: vao,
     bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
-    uniforms: uniforms
+    uniforms: uniforms,
+    textures: loadTextures(textures.locations),
+    textureUniforms: textureUniforms
   };
 }
 
-function addObjectToDraw(shaderProgram, object, uniformNames, texture) {
+function addObjectToDraw(shaderProgram, object, uniformNames, textures) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, object, uniformNames, texture));
+    createObjectToDraw(shaderProgram, object, uniformNames, textures));
 }
 
 function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
