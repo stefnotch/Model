@@ -35,8 +35,7 @@ var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257],
 var pitch = -364,
   yaw = -1085; //15,5
 //50, 0
-var lightRot = [1, -0.5, -0.3],
-  lightPos = [1*10, -0.5*10, -0.3*10];
+var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
 
@@ -261,8 +260,76 @@ var Mat4 = {
     ];
   }
 };
-
-
+/**
+ * WXYZ Quaternions
+ */
+var Quaternion = {
+  wxyzToMat4: function(w, x, y, z) {
+    return [
+      1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y, 0,
+      2 * x * y + 2 * w * z, 1 - 2 * x * x - 2 * z * z, 2 * y * z + 2 * w * x, 0,
+      2 * x * z - 2 * w * y, 2 * y * z - 2 * w * x, 1 - 2 * x * x - 2 * y * y, 0,
+      0, 0, 0, 1
+    ];
+  },
+  toMat4: function(q) {
+    var w = q[0],
+      x = q[1],
+      y = q[2],
+      z = q[3];
+    return [
+      1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y, 0,
+      2 * x * y + 2 * w * z, 1 - 2 * x * x - 2 * z * z, 2 * y * z + 2 * w * x, 0,
+      2 * x * z - 2 * w * y, 2 * y * z - 2 * w * x, 1 - 2 * x * x - 2 * y * y, 0,
+      0, 0, 0, 1
+    ];
+  },
+  multiply: function(q1, q2) {
+    var w1 = q1[0],
+      x1 = q1[1],
+      y1 = q1[2],
+      z1 = q1[3],
+      w2 = q2[0],
+      x2 = q2[1],
+      y2 = q2[2],
+      z2 = q2[3];
+    return [
+      (w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2),
+      (w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2),
+      (w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2),
+      (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
+    ];
+  },
+  xyzAngleToQuaternion: function(axisX, axisY, axisZ, angle) {
+    return [
+      Math.cos(angle / 2),
+      axisX * Math.sin(angle / 2),
+      axisY * Math.sin(angle / 2),
+      axisZ * Math.sin(angle / 2)
+    ];
+  },
+  axisAngle: function(axis, angle) {
+    return [
+      Math.cos(angle / 2),
+      axis[0] * Math.sin(angle / 2),
+      axis[1] * Math.sin(angle / 2),
+      axis[2] * Math.sin(angle / 2)
+    ];
+  },
+  normalize: function(q) {
+    var length = Math.sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+    // make sure we don't divide by 0.
+    if (length > 0.00001) {
+      return [q[0] / length, q[1] / length, q[2] / length, q[3] / length];
+    } else {
+      return [0, 0, 0, 0];
+    }
+  },
+  needsNormalisation: function(q) {
+    var number = q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3];
+    return number < 0.99 || number > 1.01;
+  }
+};
 //Called by the body
 function start() {
 
@@ -298,11 +365,11 @@ function start() {
       gl_FragColor = vec4(0,0,0, 1);  // black
     }`, gl.FRAGMENT_SHADER);
 
-    celLineShader = createShaderProgram(celLineVertexShader, celLineFragmentShader);
+    celLineShader = new createShaderProgram(celLineVertexShader, celLineFragmentShader);
 
-    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader, "u_matrix");
-    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader, "u_width");
-    celLineShaderBoneUniform = gl.getUniformLocation(celLineShader, "u_bones");
+    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader.prog, "u_matrix");
+    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader.prog, "u_width");
+    celLineShaderBoneUniform = gl.getUniformLocation(celLineShader.prog, "u_bones");
 
     var vertexShader = createShader(`
     attribute vec3 a_coordinate;
@@ -359,12 +426,12 @@ function start() {
 
     // Put the vertex shader and fragment shader together into
     // a complete program
-    var shaderProgram = createShaderProgram(vertexShader, fragmentShader);
+    var shaderProgram = new createShaderProgram(vertexShader, fragmentShader);
     for (var i = 0; i < model.length; i++) {
       addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_bones"], {
         locations: [model[i][0]],
         uniforms: ["u_texture"]
-      });
+      }, 1);
     }
     //Get rid of model, make it easier for the garbage collector
     //model = null;
@@ -407,7 +474,7 @@ function redraw() {
   //Check what is faster: moving this into the other loop or leaving it this way
   objectsToDraw.forEach((object) => {
     //What shader program
-    gl.useProgram(celLineShader);
+    gl.useProgram(celLineShader.prog);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
     gl.uniformMatrix4fv(celLineShaderBoneUniform, false, boneMat);
@@ -420,10 +487,15 @@ function redraw() {
   });
 
   gl.cullFace(gl.BACK);
+  var prevShaderProg = objectsToDraw[0].shaderProgram;
+  gl.useProgram(prevShaderProg.prog);
 
   objectsToDraw.forEach((object) => {
     //What shader program
-    gl.useProgram(object.shaderProgram);
+    if (prevShaderProg != object.shaderProgram) {
+      gl.useProgram(object.shaderProgram.prog);
+      prevShaderProg = object.shaderProgram;
+    }
     for (var i = 0; i < object.textures.length; i++) {
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.uniform1i(object.textureUniforms[i], i);
@@ -471,29 +543,28 @@ function calculateBones() {
   //http://webglfundamentals.org/webgl/lessons/resources/person-diagram.html
   var boneMat = [];
   for (var i = 0; i < bones.length; i++) {
+    //Normalize the quaternions
+    if (Quaternion.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quaternion.normalize(bones[i].qRot);
+
     //Rotation matrix
-    var rotMat = Mat4.multiply(Mat4.multiply(
-        Mat4.rotX(bones[i].rot[0]),
-        Mat4.rotY(bones[i].rot[1])),
-      Mat4.rotZ(bones[i].rot[2]));
+    var rotMat = Quaternion.toMat4(bones[i].qRot);
 
     //The local matrix of the bone
     var localMat =
-      Mat4.multiply(
-        Mat4.multiply(
-          Mat4.translation(-bones[i].pos[0], -bones[i].pos[1], -bones[i].pos[2]),
-          rotMat),
-        Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2]));
+      Mat4.multiply(Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2]), rotMat);
 
     //MatMath.translationMatrix(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
     //Root bone
     if (bones[i].parent == -1) {
       bones[i].worldMat = localMat;
     } else {
+      if (bones[bones[i].parent].worldMat == undefined) {
+        console.log(i);
+      }
       bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat, localMat);
     }
 
-    boneMat[bones[i].index] = bones[i].worldMat;
+    boneMat[i] = bones[i].worldMat;
   }
 
   return [].concat.apply([], boneMat);
@@ -639,26 +710,36 @@ function createShaderProgram(vertexShader, fragmentShader) {
   if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
     throw new Error(gl.getProgramInfoLog(shaderProgram));
 
-  return shaderProgram;
+  this.prog = shaderProgram;
 }
 /**
- * Sets the current attribute for a given shader
+ * Sets the current attributes for a given shader
+ * attributes: object with names, number of components and normalize
  */
-function setAttribute(attribute, numComponents = 3, type = gl.FLOAT, normalize = false) {
-  gl.enableVertexAttribArray(attribute);
-  //numComponents: (x, y, z)
-  //normalize: leave the values as they are
-  var offset = 0; // start at the beginning of the buffer
-  var stride = 0; // how many bytes to move to the next vertex
-  // 0 = use the correct stride for type and numComponents
-  gl.vertexAttribPointer(attribute, numComponents, type, normalize, stride, offset);
+function setAttributes(attributes, shaderProgram, offset = 0) {
+  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
+  offset (must be a multiple of the type)*/
+  //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
+  var numberOfElements = 0;
+  attributes.forEach(attribute => {
+    numberOfElements += attribute[1];
+  });
+  var prevNumberOfElements = 0;
+  attributes.forEach(attribute => {
+    var att = gl.getAttribLocation(shaderProgram, attribute[0]);
+    gl.enableVertexAttribArray(att);
+    //gl.vertexAttribPointer(index, size, type, normalized, stride, offset);
+    gl.vertexAttribPointer(att, attribute[1], gl.FLOAT, attribute[2], numberOfElements * 4, offset + prevNumberOfElements * 4);
+    prevNumberOfElements += attribute[1];
+  });
+
   //console.trace();
   //return positionLocation; //Location of the stuff that is being fed to the shader
 }
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(shaderProgram, object, uniformNames, textures) {
+function createObjectToDraw(shaderProgram, object, uniformNames, textures, boneType) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -668,41 +749,25 @@ function createObjectToDraw(shaderProgram, object, uniformNames, textures) {
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
   //CO, UV, NORMALS
-  var coAtt = gl.getAttribLocation(shaderProgram, "a_coordinate");
-  gl.enableVertexAttribArray(coAtt);
-  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
-  offset (must be a multiple of the type)*/
-  //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
-  gl.vertexAttribPointer(coAtt, 3, gl.FLOAT, false, 12 * 4, 4);
-
-  var uvAtt = gl.getAttribLocation(shaderProgram, "a_texcoord");
-  gl.enableVertexAttribArray(uvAtt);
-  gl.vertexAttribPointer(uvAtt, 2, gl.FLOAT, true, 12 * 4, 4 + 3 * 4);
-
-  var noAtt = gl.getAttribLocation(shaderProgram, "a_normal");
-  gl.enableVertexAttribArray(noAtt);
-  gl.vertexAttribPointer(noAtt, 3, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4);
-
-  var baryAtt = gl.getAttribLocation(shaderProgram, "a_bary");
-  gl.enableVertexAttribArray(baryAtt);
-  gl.vertexAttribPointer(baryAtt, 3, gl.FLOAT, false, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4);
-
-  var boneAtt = gl.getAttribLocation(shaderProgram, "a_bone");
-  gl.enableVertexAttribArray(boneAtt);
-  gl.vertexAttribPointer(boneAtt, 1, gl.FLOAT, true, 12 * 4, 4 + 3 * 4 + 2 * 4 + 3 * 4 + 3 * 4);
-
+  setAttributes([
+    ["a_coordinate", 3, false],
+    ["a_texcoord", 2, true],
+    ["a_normal", 3, true],
+    ["a_bary", 3, false],
+    ["a_bone", 1, true]
+  ], shaderProgram.prog, 4);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
 
   var uniforms = [];
   uniformNames.forEach(s => {
-    uniforms[s] = gl.getUniformLocation(shaderProgram, s);
+    uniforms[s] = gl.getUniformLocation(shaderProgram.prog, s);
   });
 
   var textureUniforms = [];
   for (var i = 0; i < textures.uniforms.length; i++) {
     //Shader program texture index
-    textureUniforms.push(gl.getUniformLocation(shaderProgram, textures.uniforms[i]), i);
+    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]), i);
   }
 
   vaoExt.bindVertexArrayOES(null);
@@ -717,9 +782,9 @@ function createObjectToDraw(shaderProgram, object, uniformNames, textures) {
   };
 }
 
-function addObjectToDraw(shaderProgram, object, uniformNames, textures) {
+function addObjectToDraw(shaderProgram, object, uniformNames, textures, boneType) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, object, uniformNames, textures));
+    createObjectToDraw(shaderProgram, object, uniformNames, textures, boneType));
 }
 
 function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
