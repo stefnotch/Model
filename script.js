@@ -173,7 +173,6 @@ var Mat4 = {
     if (matrix.length != 16) {
       throw Error("The matrix needs to be 4 * 4.");
     }
-    console.log(matrix);
     var transposedMatrix = [];
     for (var y = 0; y < 4; y++) {
       for (var x = 0; x < 4; x++) {
