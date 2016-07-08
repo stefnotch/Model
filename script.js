@@ -27,14 +27,13 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [0.01949340192754735, -3.8645168815501116, -7.404473428185231 ],
+var pos = [0.07357800747744046, 0.9648815308444683, 4.263834846745521],
   velocity = [0, 0, 0],
   speed = 0.01;
 
 //Rotation
-var pitch = -364,
-  yaw = -1085; //15,5
-//50, 0
+var pitch = -10,
+  yaw = 175; 
 var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
@@ -49,6 +48,14 @@ var celLineShaderWidthUniform;
 var celLineShaderBoneUniform;
 
 var Mat4 = {
+  identity: function() {
+    return [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+  },
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
   },
@@ -516,33 +523,19 @@ function redraw() {
 
 
   gl.disable(gl.CULL_FACE);
-  //gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-  //gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-  //gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-  //gl.enable(gl.BLEND);
-  /*transparentObjectsToDraw.forEach((object) => {
-    //What shader program
-    gl.useProgram(object.shaderProgram);
-    //What vertices should get used by the GPU
-    //gl.bindBuffer(gl.ARRAY_BUFFER, object.buffer);
-    //Now, let's make our shader able to use the vertices
-    //object.attributes.forEach((s) =>
-    //setAttribute(s));
-    //Uniforms such as the matrix
-    gl.uniformMatrix4fv(object.uniforms, false, matrix);
+  //Draw transparent objects
 
-    vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);
-  });*/
   window.requestAnimationFrame(redraw);
 }
+
+
+var inverseTransform = Mat4.identity();
 
 function calculateBones() {
   //http://webglfundamentals.org/webgl/lessons/resources/person-diagram.html
   var boneMat = [];
   for (var i = 0; i < bones.length; i++) {
+    /*
     //Normalize the quaternions
     if (Quaternion.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quaternion.normalize(bones[i].qRot);
 
@@ -563,8 +556,21 @@ function calculateBones() {
       }
       bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat, localMat);
     }
+    */
 
-    boneMat[i] = bones[i].worldMat;
+    //Root bone
+    if (bones[i].parent == -1 && inverseTransform == Mat4.identity()) {
+      inverseTransform = Mat4.makeInverseCrap(bones[i].mat);
+    }
+    //  bones[i].worldMat = bones[i].mat;
+    //} else {
+    //  if (bones[bones[i].parent].worldMat == undefined) {
+    //    console.log(i);
+    // }
+    // bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat,bones[i].mat);
+    //}
+
+    boneMat[i] = Mat4.multiply(Mat4.multiply(inverseTransform , bones[i].mat) , bones[i].boneMat);
   }
 
   return [].concat.apply([], boneMat);
@@ -577,56 +583,57 @@ function loadTextures(textureLocations, prefix = "Model/tex/") {
 
   var returnTextures = [];
   for (var i = 0; i < textureLocations.length; i++) {
-      // Create a texture.
-      var texture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      var tex = textureLocations[i].split(";");
-      //If it is a nonexistent texture
-      if (textureLocations[i].indexOf("nonexistent.png") > -1) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-          new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
-        return texture;
-      } else {
-        // Fill the texture with a 1x1 blue pixel.
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-          new Uint8Array([0, 0, 255, 255]));
-      }
-      // Asynchronously load an image
-      var image = new Image();
-      image.src = prefix + tex[0];
+    // Create a texture.
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    var tex = textureLocations[i].split(";");
+    //If it is a nonexistent texture
+    if (textureLocations[i].indexOf("nonexistent.png") > -1) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+        new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
+      return texture;
+    } else {
+      // Fill the texture with a 1x1 blue pixel.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+        new Uint8Array([0, 0, 255, 255]));
+    }
+    // Asynchronously load an image
+    var image = new Image();
+    image.src = prefix + tex[0];
 
-      image.addEventListener('load', function() {
-        var mips = false;
-        //Bind the texture
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-          if (image.width == image.height) {
-            // Scale up the texture to the next highest power of two dimensions.
-            var canvas = document.createElement("canvas");
-            canvas.width = nextHighestPowerOfTwo(image.width);
-            canvas.height = nextHighestPowerOfTwo(image.height);
-            var ctx = canvas.getContext("2d");
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-            image = canvas;
-            mips = true;
-          } else {
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            //No mipmaps
-          }
-        } else {
-          //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+    image.addEventListener('load', function() {
+      var mips = false;
+      //Bind the texture
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
+        if (image.width == image.height) {
+          // Scale up the texture to the next highest power of two dimensions.
+          var canvas = document.createElement("canvas");
+          canvas.width = nextHighestPowerOfTwo(image.width);
+          canvas.height = nextHighestPowerOfTwo(image.height);
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          image = canvas;
           mips = true;
+        } else {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          //No mipmaps
         }
-        // Now that the image has loaded make copy it to the texture.
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        if (mips) {
-          //Generate some mipmaps!
-          gl.generateMipmap(gl.TEXTURE_2D);
-        }
-      });
-      returnTextures.push(texture);
+      } else {
+        //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+        mips = true;
+      }
+      // Now that the image has loaded make copy it to the texture.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      if (mips) {
+        //Generate some mipmaps!
+        gl.generateMipmap(gl.TEXTURE_2D);
+      }
+    });
+
+    returnTextures.push(texture);
   }
   return returnTextures;
 }
@@ -642,37 +649,7 @@ function nextHighestPowerOfTwo(x) {
   }
   return x + 1;
 }
-/**
- * Creates and uploads a VBO to the GPU
- */
-function createVBO(vertices) {
-  // Copy an array of data points forming a triangle to the
-  // graphics hardware
-  var buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
 
-  //gl.bindBuffer(gl.ARRAY_BUFFER, null); // unbinding
-  return buffer;
-}
-/**
- * Creates a buffer and attributes
- *
- */
-function createBufferAndAttribute(bufferData, attribute, type = gl.ARRAY_BUFFER, numComponents = 3, stride = 0, offset = 0) {
-
-  if (typeof attributeName === 'string') {
-    //TODO Do something about it!
-  }
-
-  var buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-
-  gl.enableVertexAttribArray(attribute);
-  gl.vertexAttribPointer(attribute, numComponents, gl.FLOAT, false, stride, offset);
-
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bufferData), gl.STATIC_DRAW);
-}
 /**
  * Creates a shader and returns it.
  * Tries to figure out the type if not specified.
@@ -782,12 +759,10 @@ function addObjectToDraw(shaderProgram, object, uniformNames, textures, boneType
     createObjectToDraw(shaderProgram, object, uniformNames, textures, boneType));
 }
 
-function addTransparentObjectToDraw(shaderProgram, attributes, uniformName, textureName) {
-  transparentObjectsToDraw.push(
-    createObjectToDraw(shaderProgram, attributes, uniformName, textureName));
-}
+//Init functions
+
 /**
- * OMG! C9 rocks!
+ * Inits the canvas
  */
 function initCanvas(canvasName) {
   //init canvas
@@ -843,9 +818,6 @@ function initWebGL(canvas) {
 function setUpBones() {
   for (var i = 0; i < bones.length; i++) {
     var copyParentPos = false;
-    if (bones[i].rot == undefined) {
-      bones[i].rot = [0, 0, 0];
-    }
     if (bones[i].pos == undefined) {
       bones[i].pos = [0, 0, 0];
     } else if (bones[i].pos == "parent") {
