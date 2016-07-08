@@ -27,9 +27,9 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [30.335550830986044, -178.27499640254624, -75.95519232125257],
+var pos = [0.01949340192754735, -3.8645168815501116, -7.404473428185231 ],
   velocity = [0, 0, 0],
-  speed = 1;
+  speed = 0.01;
 
 //Rotation
 var pitch = -364,
@@ -478,7 +478,7 @@ function redraw() {
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
     gl.uniformMatrix4fv(celLineShaderBoneUniform, false, boneMat);
-    gl.uniform1f(celLineShaderWidthUniform, 0.1);
+    gl.uniform1f(celLineShaderWidthUniform, 0.005);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the outlines
@@ -573,12 +573,10 @@ function calculateBones() {
 /**
  * Loads a texture from a URL
  */
-function loadTextures(textureLocations) {
-  var prefix = "Model/tex/"
+function loadTextures(textureLocations, prefix = "Model/tex/") {
 
   var returnTextures = [];
   for (var i = 0; i < textureLocations.length; i++) {
-    if (typeof textureLocations[i] == "string") {
       // Create a texture.
       var texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -629,9 +627,6 @@ function loadTextures(textureLocations) {
         }
       });
       returnTextures.push(texture);
-    } else {
-      returnTextures.push(textureLocations[i]);
-    }
   }
   return returnTextures;
 }
@@ -777,7 +772,7 @@ function createObjectToDraw(shaderProgram, object, uniformNames, textures, boneT
     vao: vao,
     bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
     uniforms: uniforms,
-    textures: loadTextures(textures.locations),
+    textures: loadTextures(textures.locations, "Model/catTex/"),
     textureUniforms: textureUniforms
   };
 }
