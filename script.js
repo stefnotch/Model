@@ -18,6 +18,7 @@ USE gl.readPixels and apply an edge detection shader to all textures prefixed wi
 Apply a sharpen shader to all textures prefixed with s_
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
 Don't switch shaders as often
+https://sourceforge.net/p/assimp/discussion/817654/thread/5462cbf5/
 
 Normalize -> 32 bits (float) to 8 bits (0,1 range)
 Move Shaders somewhere else
@@ -27,18 +28,16 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [0.07357800747744046, 0.9648815308444683, 4.263834846745521],
+var pos = [0.07357800747744046, -3, -3],
   velocity = [0, 0, 0],
   speed = 0.01;
 
 //Rotation
-var pitch = -10,
-  yaw = 175; 
+var pitch = 5,
+  yaw = 0;
 var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
-
-var transparentObjectsToDraw = [];
 
 var drawDragon = true;
 
@@ -54,7 +53,7 @@ var Mat4 = {
       0, 1, 0, 0,
       0, 0, 1, 0,
       0, 0, 0, 1
-    ]
+    ];
   },
   degToRad: function(angleInDeg) {
     return angleInDeg * Math.PI / 180;
@@ -278,6 +277,43 @@ var Quaternion = {
       0, 0, 0, 1
     ];
   },
+  toAssimpMat4: function(q) {
+    var W = q[0],
+      X = q[1],
+      Y = q[2],
+      Z = q[3];
+    var xx = X * X;
+    var yy = Y * Y;
+    var zz = Z * Z;
+
+    var xy = X * Y;
+    var zw = Z * W;
+    var zx = Z * X;
+    var yw = Y * W;
+    var yz = Y * Z;
+    var xw = X * W;
+
+    return [
+      1.0 - (2.0 * (yy + zz)), //A1
+      2.0 * (xy + zw), //B1
+      2.0 * (zx - yw), //C1
+
+
+      0,
+      2.0 * (xy - zw), //A2
+      1.0 - (2.0 * (zz + xx)), //B2
+      2.0 * (yz + xw), //C2
+
+      0,
+
+      2.0 * (zx + yw), //A3
+      2.0 * (yz - xw), //B3
+      1.0 - (2.0 * (yy + xx)), //C3
+      0,
+      0, 0, 0, 1
+    ];
+  },
+
   toMat4: function(q) {
     var w = q[0],
       x = q[1],
@@ -527,17 +563,14 @@ function redraw() {
   window.requestAnimationFrame(redraw);
 }
 
-
-var inverseTransform = Mat4.identity();
-
 function calculateBones() {
   //http://webglfundamentals.org/webgl/lessons/resources/person-diagram.html
   var boneMat = [];
   for (var i = 0; i < bones.length; i++) {
-    /*
+
     //Normalize the quaternions
     if (Quaternion.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quaternion.normalize(bones[i].qRot);
-
+    /*
     //Rotation matrix
     var rotMat = Quaternion.toMat4(bones[i].qRot);
 
@@ -556,20 +589,23 @@ function calculateBones() {
       bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat, localMat);
     }
     */
+    var localMat = //bones[i].mat;
+        Mat4.multiply(
+          Quaternion.toAssimpMat4(bones[i].qRot),
+          Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+        );
 
     //Root bone
-    if (bones[i].parent == -1 && inverseTransform == Mat4.identity()) {
-      inverseTransform = Mat4.makeInverseCrap(bones[i].mat);
-    }
-    //  bones[i].worldMat = bones[i].mat;
-    //} else {
-    //  if (bones[bones[i].parent].worldMat == undefined) {
-    //    console.log(i);
-    // }
-    // bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat,bones[i].mat);
-    //}
+    if (bones[i].parent == -1) {
+      bones[i].worldMat = localMat;
+    } else {
+      if (bones[bones[i].parent].worldMat == undefined) {
+        console.log(i);
+      }
 
-    boneMat[i] = Mat4.multiply(Mat4.multiply(inverseTransform , bones[i].mat) , bones[i].boneMat);
+      bones[i].worldMat = Mat4.multiply(localMat, bones[bones[i].parent].worldMat);
+    }
+    boneMat[i] = Mat4.multiply(bones[i].boneMat, bones[i].worldMat);
   }
 
   return [].concat.apply([], boneMat);
