@@ -2,13 +2,12 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model bones*/
+/*global model bones setUpPicker pickPixel*/
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
 /*TODO
 Create class for shader programs
 Edit the texture at runtime (Color and edge detection)
-Rotate the vertex normals (skelly animation)
 Copy over the pos coordinates if the child doesn't have them!
 Matrix multiplication library, they are doing everything that I can do, and better
 bones
@@ -28,7 +27,7 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [0.07357800747744046, -3, -3],
+var pos = [-0.07357800747744046, 3, 3],
   velocity = [0, 0, 0],
   speed = 0.01;
 
@@ -42,9 +41,6 @@ var objectsToDraw = [];
 var drawDragon = true;
 
 var celLineShader;
-var celLineShaderMatrixUniform;
-var celLineShaderWidthUniform;
-var celLineShaderBoneUniform;
 
 var Mat4 = {
   identity: function() {
@@ -382,6 +378,7 @@ function start() {
 
   if (gl) {
     setUpBones();
+    setUpPicker();
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
@@ -407,11 +404,10 @@ function start() {
       gl_FragColor = vec4(0,0,0, 1);  // black
     }`, gl.FRAGMENT_SHADER);
 
-    celLineShader = new createShaderProgram(celLineVertexShader, celLineFragmentShader);
-
-    celLineShaderMatrixUniform = gl.getUniformLocation(celLineShader.prog, "u_matrix");
-    celLineShaderWidthUniform = gl.getUniformLocation(celLineShader.prog, "u_width");
-    celLineShaderBoneUniform = gl.getUniformLocation(celLineShader.prog, "u_bones");
+    celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader);
+    celLineShader.addUniform("u_matrix");
+    celLineShader.addUniform("u_width");
+    celLineShader.addUniform("u_bones");
 
     var vertexShader = createShader(`
     attribute vec3 a_coordinate;
@@ -420,7 +416,7 @@ function start() {
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
     uniform mat4 u_matrix; //The Matrix!
-    uniform mat4 u_bones[32]; //32 bones can be moved
+    uniform mat4 u_bones[128]; //Bones that can be moved
     varying vec2 v_textureCoord;
     varying vec3 v_normal;
     varying vec3 v_bary;
@@ -446,7 +442,7 @@ function start() {
     uniform sampler2D u_texture;
 
     void main() {
-    if(any(lessThan(v_bary, vec3(0.06)))){
+    if(any(lessThan(v_bary, vec3(0.001)))){
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
       }else{
       //step?
@@ -468,7 +464,7 @@ function start() {
 
     // Put the vertex shader and fragment shader together into
     // a complete program
-    var shaderProgram = new createShaderProgram(vertexShader, fragmentShader);
+    var shaderProgram = new ShaderProg(vertexShader, fragmentShader);
     for (var i = 0; i < model.length; i++) {
       addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_bones"], {
         locations: [model[i][0]],
@@ -478,7 +474,6 @@ function start() {
     //Get rid of model, make it easier for the garbage collector
     //model = null;
 
-    //addTransparentObjectToDraw(waterShaderProgram, water, ["coordinates"], "u_matrix", "SharpMap.png");
     // Everything we need has now been copied to the graphics
     // hardware, so we can start drawing
 
@@ -499,13 +494,16 @@ function redraw() {
   pos[2] += velocity[2] * speed;
 
   var modelMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
-  modelMat = Mat4.multiply(modelMat, Mat4.translation(-pos[0], -pos[1], -pos[2]));
+  modelMat = Mat4.multiply(modelMat, Mat4.translation(pos[0], pos[1], pos[2]));
   var viewMat = Mat4.makeInverseCrap(modelMat);
 
 
   //Projection matrix => Mat4.makePerspective
   var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
+
   var boneMat = calculateBones();
+
+  pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
   //
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND);
@@ -514,13 +512,13 @@ function redraw() {
   gl.enable(gl.CULL_FACE);
 
   //Check what is faster: moving this into the other loop or leaving it this way
+  //What shader program
+  gl.useProgram(celLineShader.prog);
+  //Uniforms such as the matrix
+  gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
+  gl.uniformMatrix4fv(celLineShader.uniforms["u_bones"], false, boneMat);
+  gl.uniform1f(celLineShader.uniforms["u_width"], 0.005);
   objectsToDraw.forEach((object) => {
-    //What shader program
-    gl.useProgram(celLineShader.prog);
-    //Uniforms such as the matrix
-    gl.uniformMatrix4fv(celLineShaderMatrixUniform, false, matrix);
-    gl.uniformMatrix4fv(celLineShaderBoneUniform, false, boneMat);
-    gl.uniform1f(celLineShaderWidthUniform, 0.005);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the outlines
@@ -570,30 +568,11 @@ function calculateBones() {
 
     //Normalize the quaternions
     if (Quaternion.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quaternion.normalize(bones[i].qRot);
-    /*
-    //Rotation matrix
-    var rotMat = Quaternion.toMat4(bones[i].qRot);
-
-    //The local matrix of the bone
-    var localMat =
-      Mat4.multiply(Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2]), rotMat);
-
-    //MatMath.translationMatrix(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
-    //Root bone
-    if (bones[i].parent == -1) {
-      bones[i].worldMat = localMat;
-    } else {
-      if (bones[bones[i].parent].worldMat == undefined) {
-        console.log(i);
-      }
-      bones[i].worldMat = Mat4.multiply(bones[bones[i].parent].worldMat, localMat);
-    }
-    */
     var localMat = //bones[i].mat;
-        Mat4.multiply(
-          Quaternion.toAssimpMat4(bones[i].qRot),
-          Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
-        );
+      Mat4.multiply(
+        Quaternion.toAssimpMat4(bones[i].qRot),
+        Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+      );
 
     //Root bone
     if (bones[i].parent == -1) {
@@ -609,6 +588,15 @@ function calculateBones() {
   }
 
   return [].concat.apply([], boneMat);
+}
+
+function boneByName(name) {
+  //Loop over the other bones and find the parent
+  for (var i = 0; i < bones.length; i++) {
+    if (bones[i].name == name) {
+      return i;
+    }
+  }
 }
 
 /**
@@ -707,7 +695,7 @@ function createShader(shaderCode, shaderType = -1) {
   return shader;
 }
 
-function createShaderProgram(vertexShader, fragmentShader) {
+function ShaderProg(vertexShader, fragmentShader) {
   // Put the vertex shader and fragment shader together into
   // a complete program
   var shaderProgram = gl.createProgram();
@@ -718,7 +706,15 @@ function createShaderProgram(vertexShader, fragmentShader) {
     throw new Error(gl.getProgramInfoLog(shaderProgram));
 
   this.prog = shaderProgram;
+  this.addUniform = addUniform;
+  this.uniforms = {};
 }
+
+function addUniform(uniformName) {
+  this.uniforms[uniformName] = gl.getUniformLocation(this.prog, uniformName);
+}
+
+
 /**
  * Sets the current attributes for a given shader
  * attributes: object with names, number of components and normalize
@@ -852,31 +848,20 @@ function initWebGL(canvas) {
 
 function setUpBones() {
   for (var i = 0; i < bones.length; i++) {
-    var copyParentPos = false;
     if (bones[i].pos == undefined) {
       bones[i].pos = [0, 0, 0];
-    } else if (bones[i].pos == "parent") {
-      copyParentPos = true;
     }
     //If the bone's parent is given as a string
     if (typeof bones[i].parent == "string") {
-      //Loop over the other bones and find the parent
-      for (var j = 0; j < bones.length; j++) {
-        if (bones[j].name == bones[i].parent) {
-          bones[i].parent = j;
-          if (copyParentPos) {
-            bones[i].pos = bones[j].pos;
-          }
-          //If the parent comes after the child, something is wrong
-          if (j >= i) {
-            throw new Error("Bone parent after child!" + j);
-          }
-          break;
-        }
-      }
+      bones[i].parent = boneByName(bones[i].parent);
+    }
+    //If the parent comes after the child, something is wrong
+    if (bones[i].parent >= i) {
+      throw new Error("Bone parent after child!" + i);
     }
   }
 }
+
 /**
  * For quickly loading a locally stored model
  */
@@ -918,15 +903,15 @@ function keyboardHandlerDown(keyboardEvent) {
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
-      velocity[0] = Math.sin(yawRad) * Math.cos(pitchRad);
-      velocity[1] = -Math.sin(pitchRad);
-      velocity[2] = Math.cos(yawRad) * Math.cos(pitchRad);
-      break;
-    case "KeyS":
-    case "ArrowDown":
       velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
       velocity[1] = Math.sin(pitchRad);
       velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
+      break;
+    case "KeyS":
+    case "ArrowDown":
+      velocity[0] = Math.sin(yawRad) * Math.cos(pitchRad);
+      velocity[1] = -Math.sin(pitchRad);
+      velocity[2] = Math.cos(yawRad) * Math.cos(pitchRad);
       break;
     case "KeyA":
     case "ArrowLeft":
