@@ -42,6 +42,12 @@ var drawDragon = true;
 
 var celLineShader;
 
+var mouse = {
+  clicked: false,
+  X: 0,
+  Y: 0
+};
+
 var Mat4 = {
   identity: function() {
     return [
@@ -502,8 +508,13 @@ function redraw() {
   var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 1000));
 
   var boneMat = calculateBones();
-
-  pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
+  if (mouse.clicked) {
+    //pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
+    //mouse.X / glcanvas.clientWidth;
+    //-mouse.Y / glcanvas.clientHeight;
+    pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, mouse.Y / glcanvas.clientHeight * 2, 0)), boneMat);
+    mouse.clicked = false;
+  }
   //
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.disable(gl.BLEND);
@@ -955,6 +966,9 @@ function mouseHandler(mouseEvent) {
 }
 
 function mouseClickHandler(mouseEvent) {
+  mouse.clicked = true;
+  mouse.X = mouseEvent.offsetX;
+  mouse.Y = mouseEvent.offsetY;
   //http://www.opengl-tutorial.org/miscellaneous/clicking-on-objects/picking-with-an-opengl-hack/
   //http://stackoverflow.com/questions/21841483/webgl-using-framebuffers-for-picking-multiple-objects
 }
