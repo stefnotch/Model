@@ -512,7 +512,10 @@ function redraw() {
     //pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
     //mouse.X / glcanvas.clientWidth;
     //-mouse.Y / glcanvas.clientHeight;
-    pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, mouse.Y / glcanvas.clientHeight * 2, 0)), boneMat);
+    pickPixel(objectsToDraw,
+      Mat4.multiply(matrix,
+        Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, (1 - mouse.Y / glcanvas.clientHeight) * -2, 0)
+      ), boneMat);
     mouse.clicked = false;
   }
   //
