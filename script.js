@@ -2,7 +2,7 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model bones setUpPicker pickPixel*/
+/*global model bones setUpPicker pickPixel initSidebar animations*/
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
 /*TODO
@@ -47,6 +47,7 @@ var mouse = {
   X: 0,
   Y: 0
 };
+var rigging = false;
 
 var Mat4 = {
   identity: function() {
@@ -271,6 +272,96 @@ var Mat4 = {
  * WXYZ Quaternions
  */
 var Quaternion = {
+  //https://keithmaggio.wordpress.com/2011/02/15/math-magician-lerp-slerp-and-nlerp/
+  //http://physicsforgames.blogspot.co.at/2010/02/quaternions.html
+  //http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
+  //https://gist.github.com/zeux/bedeac66c22b802047b7
+  /* Quaternion.fastSlerp = function(start, end, t, result) {
+        //>>includeStart('debug', pragmas.debug);
+        if (!defined(start)) {
+            throw new DeveloperError('start is required.');
+        }
+        if (!defined(end)) {
+            throw new DeveloperError('end is required.');
+        }
+        if (typeof t !== 'number') {
+            throw new DeveloperError('t is required and must be a number.');
+        }
+        if (!defined(result)) {
+            throw new DeveloperError('result is required');
+        }
+        //>>includeEnd('debug');
+
+        var x = Quaternion.dot(start, end);
+
+        var sign;
+        if (x >= 0) {
+            sign = 1.0;
+        } else {
+            sign = -1.0;
+            x = -x;
+        }
+
+        var xm1 = x - 1.0;
+        var d = 1.0 - t;
+        var sqrT = t * t;
+        var sqrD = d * d;
+
+        for (var i = 7; i >= 0; --i) {
+            bT[i] = (u[i] * sqrT - v[i]) * xm1;
+            bD[i] = (u[i] * sqrD - v[i]) * xm1;
+        }
+
+        var cT = sign * t * (
+            1.0 + bT[0] * (1.0 + bT[1] * (1.0 + bT[2] * (1.0 + bT[3] * (
+            1.0 + bT[4] * (1.0 + bT[5] * (1.0 + bT[6] * (1.0 + bT[7]))))))));
+        var cD = d * (
+            1.0 + bD[0] * (1.0 + bD[1] * (1.0 + bD[2] * (1.0 + bD[3] * (
+            1.0 + bD[4] * (1.0 + bD[5] * (1.0 + bD[6] * (1.0 + bD[7]))))))));
+
+        var temp = Quaternion.multiplyByScalar(start, cD, fastSlerpScratchQuaternion);
+        Quaternion.multiplyByScalar(end, cT, result);
+        return Quaternion.add(temp, result, result);
+};*/
+  nlerp1: function(q1, q2, blendFactor) {
+    var w1 = q1[0],
+      x1 = q1[1],
+      y1 = q1[2],
+      z1 = q1[3],
+      w2 = q2[0],
+      x2 = q2[1],
+      y2 = q2[2],
+      z2 = q2[3];
+    var dot = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2;
+    var blendI = 1.0 - blendFactor;
+    if (dot < 0) blendFactor = -blendFactor;
+
+    return this.normalize([
+      blendI * w1 + blendFactor * w2,
+      blendI * x1 + blendFactor * x2,
+      blendI * y1 + blendFactor * y2,
+      blendI * z1 + blendFactor * z2
+    ]);
+
+  },
+  nlerp2: function(q1, q2, blendFactor) {
+    var w1 = q1[0],
+      x1 = q1[1],
+      y1 = q1[2],
+      z1 = q1[3],
+      w2 = q2[0],
+      x2 = q2[1],
+      y2 = q2[2],
+      z2 = q2[3];
+    var blendI = 1.0 - blendFactor;
+
+    return this.normalize([
+      blendI * w1 + blendFactor * w2,
+      blendI * x1 + blendFactor * x2,
+      blendI * y1 + blendFactor * y2,
+      blendI * z1 + blendFactor * z2
+    ]);
+  },
   wxyzToMat4: function(w, x, y, z) {
     return [
       1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y, 0,
@@ -366,7 +457,7 @@ var Quaternion = {
     if (length > 0.00001) {
       return [q[0] / length, q[1] / length, q[2] / length, q[3] / length];
     } else {
-      return [0, 0, 0, 0];
+      return [0, 0, 0, 1];
     }
   },
   needsNormalisation: function(q) {
@@ -378,7 +469,7 @@ var Quaternion = {
 function start() {
 
   initCanvas("glcanvas");
-
+  initSidebar();
   //Init WebGL
   gl = initWebGL(glcanvas);
 
@@ -472,7 +563,7 @@ function start() {
     // a complete program
     var shaderProgram = new ShaderProg(vertexShader, fragmentShader);
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw(shaderProgram, model[i], ["u_matrix", "u_light", "u_bones"], {
+      addObjectToDraw("cat", shaderProgram, model[i], ["u_matrix", "u_light", "u_bones"], {
         locations: [model[i][0]],
         uniforms: ["u_texture"]
       }, 1);
@@ -575,18 +666,77 @@ function redraw() {
   window.requestAnimationFrame(redraw);
 }
 
+var currAnimation = "nod";
+
+/**
+ * Applies a step of an animation. Returns true, if it reached the end
+ */
+function animationStep(animationName) {
+  var a = animations[animationName];
+  //Special case
+  if (a.frame == 0) {
+
+  } else {
+    //The 2 keyframes
+    var keyframe1 = a.keyframes[a.frame << 0];
+    var keyframe2 = a.keyframes[(a.frame << 0) + 1];
+    if (keyframe2 == undefined) {
+      console.trace();
+      console.log(keyframe2 + ":" + a.frame);
+    }
+    var interpolationFactor = a.frame % 1; //Really cool
+    //For each bone in the animation
+    for (var i = 0; i < a.usedBones.length; i++) {
+      var boneIndex = a.usedBones[i];
+      bones[boneIndex].qRot = Quaternion.nlerp1(
+        keyframe1[i], keyframe2[i], interpolationFactor);
+    }
+  }
+
+  a.frame += 0.001;
+  if (a.frame >= a.keyframes.length - 1) {
+    a.frame = 0;
+    return true;
+  }
+  return false;
+}
+
 function calculateBones() {
-  //http://webglfundamentals.org/webgl/lessons/resources/person-diagram.html
   var boneMat = [];
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions
     if (Quaternion.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quaternion.normalize(bones[i].qRot);
-    var localMat = //bones[i].mat;
-      Mat4.multiply(
+    var localMat;
+
+    //TODO Make this a lot better! Pre-processing step?
+    /*if (animations[animationFrame << 0] == undefined) {
+      animations[animationFrame << 0] = [];
+    }
+    if (animations[animationFrame << 0][i] == undefined) {
+      animations[animationFrame << 0][i] = bones[i].qRot;
+    }
+    var currAnimation = animations[animationFrame << 0];
+    var nextAnimation = animations[(animationFrame << 0) + 1];
+    if (nextAnimation != undefined && currAnimation[i] != undefined && nextAnimation[i] != undefined) {
+      localMat = Mat4.multiply(
+        Quaternion.toAssimpMat4(Quaternion.nlerp1(
+          currAnimation[i], nextAnimation[i], animationFrame)),
+        Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+      );
+    } else {
+      localMat = Mat4.multiply(
         Quaternion.toAssimpMat4(bones[i].qRot),
         Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
       );
+    }*/
+
+    animationStep(currAnimation);
+
+    localMat = Mat4.multiply(
+      Quaternion.toAssimpMat4(bones[i].qRot),
+      Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+    );
 
     //Root bone
     if (bones[i].parent == -1) {
@@ -600,7 +750,6 @@ function calculateBones() {
     }
     boneMat[i] = Mat4.multiply(bones[i].boneMat, bones[i].worldMat);
   }
-
   return [].concat.apply([], boneMat);
 }
 
@@ -616,7 +765,7 @@ function boneByName(name) {
 /**
  * Loads a texture from a URL
  */
-function loadTextures(textureLocations, prefix = "Model/tex/") {
+function loadTextures(textureLocations, prefix) {
 
   var returnTextures = [];
   for (var i = 0; i < textureLocations.length; i++) {
@@ -628,48 +777,47 @@ function loadTextures(textureLocations, prefix = "Model/tex/") {
     if (textureLocations[i].indexOf("nonexistent.png") > -1) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
         new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
-      return texture;
     } else {
       // Fill the texture with a 1x1 blue pixel.
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
         new Uint8Array([0, 0, 255, 255]));
-    }
-    // Asynchronously load an image
-    var image = new Image();
-    image.src = prefix + tex[0];
 
-    image.addEventListener('load', function() {
-      var mips = false;
-      //Bind the texture
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-        if (image.width == image.height) {
-          // Scale up the texture to the next highest power of two dimensions.
-          var canvas = document.createElement("canvas");
-          canvas.width = nextHighestPowerOfTwo(image.width);
-          canvas.height = nextHighestPowerOfTwo(image.height);
-          var ctx = canvas.getContext("2d");
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          image = canvas;
-          mips = true;
+      // Asynchronously load an image
+      var image = new Image();
+      image.src = prefix + "/" + tex[0];
+
+      image.addEventListener('load', function() {
+        var mips = false;
+        //Bind the texture
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
+          if (image.width == image.height) {
+            // Scale up the texture to the next highest power of two dimensions.
+            var canvas = document.createElement("canvas");
+            canvas.width = nextHighestPowerOfTwo(image.width);
+            canvas.height = nextHighestPowerOfTwo(image.height);
+            var ctx = canvas.getContext("2d");
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            image = canvas;
+            mips = true;
+          } else {
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            //No mipmaps
+          }
         } else {
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-          //No mipmaps
+          //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
+          mips = true;
         }
-      } else {
-        //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-        mips = true;
-      }
-      // Now that the image has loaded make copy it to the texture.
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-      if (mips) {
-        //Generate some mipmaps!
-        gl.generateMipmap(gl.TEXTURE_2D);
-      }
-    });
-
+        // Now that the image has loaded make copy it to the texture.
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+        if (mips) {
+          //Generate some mipmaps!
+          gl.generateMipmap(gl.TEXTURE_2D);
+        }
+      });
+    }
     returnTextures.push(texture);
   }
   return returnTextures;
@@ -756,7 +904,7 @@ function setAttributes(attributes, shaderProgram, offset = 0) {
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(shaderProgram, object, uniformNames, textures, boneType) {
+function createObjectToDraw(name, shaderProgram, object, uniformNames, textures, boneType) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -794,14 +942,14 @@ function createObjectToDraw(shaderProgram, object, uniformNames, textures, boneT
     vao: vao,
     bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
     uniforms: uniforms,
-    textures: loadTextures(textures.locations, "Model/catTex/"),
+    textures: loadTextures(textures.locations, "Model/" + name),
     textureUniforms: textureUniforms
   };
 }
 
-function addObjectToDraw(shaderProgram, object, uniformNames, textures, boneType) {
+function addObjectToDraw(name, shaderProgram, object, uniformNames, textures, boneType) {
   objectsToDraw.push(
-    createObjectToDraw(shaderProgram, object, uniformNames, textures, boneType));
+    createObjectToDraw(name, shaderProgram, object, uniformNames, textures, boneType));
 }
 
 //Init functions
@@ -822,14 +970,16 @@ function initCanvas(canvasName) {
   window.addEventListener("keydown", keyboardHandlerDown);
   window.addEventListener("keyup", keyboardHandlerUp);
   window.addEventListener("wheel", scrollHandler);
-  window.addEventListener("mousemove", mouseHandler);
-  window.addEventListener("click", mouseClickHandler);
+  glcanvas.addEventListener("mousemove", mouseHandler);
+  glcanvas.addEventListener("click", mouseClickHandler);
 
   glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
     glcanvas.mozRequestPointerLock ||
     glcanvas.webkitRequestPointerLock;
-  window.addEventListener("click", () => {
-    glcanvas.requestPointerLock();
+  glcanvas.addEventListener("click", () => {
+    if (!rigging) {
+      glcanvas.requestPointerLock();
+    }
   });
 
 }
@@ -964,8 +1114,10 @@ function scrollHandler(scrollEvent) {
 }
 
 function mouseHandler(mouseEvent) {
-  yaw -= mouseEvent.movementX / 10;
-  pitch -= mouseEvent.movementY / 10;
+  if (!rigging) {
+    yaw -= mouseEvent.movementX / 10;
+    pitch -= mouseEvent.movementY / 10;
+  }
 }
 
 function mouseClickHandler(mouseEvent) {

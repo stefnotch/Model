@@ -4,10 +4,11 @@
 <head>
   <title>Anime Shading</title>
   <meta charset="utf-8">
-  <script src="./Model/output.js" type="application/javascript"></script>
-  <script src="./Model/outputBones.js" type="application/javascript"></script>
-  <script src="script.js" type="application/javascript"></script>
-  <script src="gpupick.js" type="application/javascript"></script>
+  <script src="./Model/cat/output.js" type="application/javascript" defer></script>
+  <script src="./Model/cat/outputBones.js" type="application/javascript" defer></script>
+  <script src="script.js" type="application/javascript" defer></script>
+  <script src="gpupick.js" type="application/javascript" defer></script>
+  <script src="sidebar.js" type="application/javascript" defer></script>
   <!--Bah ;version=1.8 isn't supported in Chrome-->
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
@@ -15,7 +16,17 @@
 <body onload="start()">
   <canvas id="glcanvas">Your browser doesn't appear to support the
     <code>&lt;canvas&gt;</code> element.</canvas>
-    <input id="displayText" type="text" style="position:absolute; top:10px;"></input>
+  <input id="displayText" type="text" style="display:none;position:absolute; top:10px;"></input>
+
+  <!--Range input type = slider-->
+  <div id="sidebarStupidFirefox">
+    <div class="header">
+      <button type="button" class="back"></button>&nbsp;Buttons</div>
+    <button type="button">Rig</button>
+    <button type="button" class="enabled">Foo</button>
+    <button class="icon" type="button">&#9776;</button>
+  </div>
+
 </body>
 
 </html>

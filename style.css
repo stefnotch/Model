@@ -8,3 +8,93 @@ body {
   padding: 0px;
   display: block;
 }
+
+
+/*Sidebar*/
+
+#sidebarStupidFirefox,
+button,
+.icon:hover {
+  background-color: #80256A;
+}
+
+#sidebarStupidFirefox {
+  position: absolute;
+  transition: transform 0.2s;
+  left: 0px;
+  top: 0px;
+  display: flex;
+  flex-direction: column;
+  -webkit-transform: translateX(-100%);
+  transform: translateX(-100%);
+  height: 100%;
+  font-family: "Comic Sans MS", "Comic Sans", cursive;
+}
+
+#sidebarStupidFirefox,
+button {
+  color: white;
+}
+
+#sidebarStupidFirefox button:not(.icon),
+#sidebarStupidFirefox div {
+  margin-top: 5px;
+}
+
+.icon {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  padding-left: 5px;
+  padding-right: 5px;
+  margin-right: 0px;
+  font-size: 20px;
+  font-weight: bolder;
+  border-radius: 0px;
+  border-bottom-right-radius: 4px;
+  -webkit-transform: translateX(100%);
+  transform: translateX(100%);
+}
+
+#sidebarStupidFirefox .back {
+  width: 2px;
+  height: 0;
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-right: 15px solid blue;
+  float: left;
+}
+
+#sidebarStupidFirefox .header {
+  float: left;
+  text-align: center;
+  padding-right: 15px;
+}
+
+
+/*Button css*/
+
+button {
+  margin-right: 5px;
+  margin-left: 5px;
+  font-size: 15px;
+  /*font-family: Arial, Helvetica, sans-serif;*/
+  font-family: "Comic Sans MS", "Comic Sans", cursive;
+  transition: background-color 0.1s;
+  border-radius: 3px;
+  border: solid 1px #80256A;
+}
+
+button:hover {
+  background-color: #6A5ACD;
+  cursor: pointer;
+  border-color: black;
+}
+
+.enabled {
+  background-color: #4169E1;
+}
+
+.enabled:hover {
+  background-color: #253C80;
+}
