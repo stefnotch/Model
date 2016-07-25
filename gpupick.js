@@ -1,5 +1,5 @@
 //Handles the gpu picking
-/*global gl createShader vaoExt ShaderProg Mat4 displayText*/
+/*global gl vaoExt ShaderProg Mat4 displayText*/
 
 //You need a renderbuffer for the depth texture/test
 //glReadPixels 
@@ -38,30 +38,28 @@ function setUpPicker() {
         alert("this combination of attachments does not work");
         return;
     }
-    var shadowVertShader = createShader(`
+    var shadowVertShader = `
     attribute vec3 a_coordinate;
     attribute float a_bone;
     attribute vec3 a_normal;
     
     uniform mat4 u_matrix; //The Matrix!
-    uniform mat4 u_bones[128]; //128 bones can be moved
+    uniform mat4 u_bones[113]; //128 bones can be moved
     
     varying float v_boneID;
     void main(void){
       gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate, 1);
       v_boneID = a_bone;
-    }`, gl.VERTEX_SHADER);
+    }`;
 
-    var shadowFragShader = createShader(`
+    var shadowFragShader = `
     precision mediump float;
     varying float v_boneID;
     void main() {
       gl_FragColor = vec4(v_boneID/255.0, 0, 0, 1.0);
-    }`, gl.FRAGMENT_SHADER);
+    }`;
 
     pickerShader = new ShaderProg(shadowVertShader, shadowFragShader);
-    pickerShader.addUniform("u_matrix");
-    pickerShader.addUniform("u_bones");
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 
 }
@@ -77,7 +75,7 @@ function pickPixel(objectsToDraw, viewMatrix, boneMat) {
 
     objectsToDraw.forEach((object) => {
         //Uniforms
-        gl.uniformMatrix4fv(pickerShader.uniforms["u_bones"], false, boneMat);
+        gl.uniformMatrix4fv(pickerShader.uniforms["u_bones[0]"], false, boneMat);
         gl.uniformMatrix4fv(pickerShader.uniforms["u_matrix"], false, viewMatrix);
 
         //Bind VAO
