@@ -17,6 +17,12 @@ http://image.diku.dk/projects/media/kasper.amstrup.andersen.07.pdf (Has source c
 http://www.opentissue.org/svn/OpenTissue/development/kasper/OpenTissue/kinematics/skinning/sbs/ (This be source code)
 
 http://catalog.lib.kyushu-u.ac.jp/handle/2324/1430821/p147.pdf (Swing-twist deformers)
+
+https://www.scss.tcd.ie/publications/tech-reports/reports.06/TCD-CS-2006-46.pdf (Bettah, but older)
+https://www.cs.utah.edu/~ladislav/kavan08geometric/kavan08geometric.pdf (Bettah than the rest?)
+Links about the bettah thingy:
+https://web.archive.org/web/20070311225627/http://isg.cs.tcd.ie/projects/DualQuaternions/
+
 Rotating light source
 hide object upon click
 USE gl.readPixels and apply an edge detection shader to all textures prefixed with l_
@@ -282,6 +288,60 @@ var Mat4 = {
  * WXYZ Quaternions
  */
 var Quaternion = {
+  //http://fabiensanglard.net/doom3_documentation/37726-293748.pdf
+  /*
+  void ConvertJointMatsToJointQuats( JointQuat *jointQuats, const JointMat *jointMats, const int numJoints ) {
+    for ( int i = 0; i < numJoints; i++ ) { 
+        float s0, s1, s2; 
+        int k0, k1, k2, k3; 
+        float *q = &jointQuats[i].q; 
+        const float *m = jointMats[i].mat; 
+        if ( m[0 * 4 + 0] + m[1 * 4 + 1] + m[2 * 4 + 2] > 0.0f ) { 
+            k0 = 3; 
+            k1 = 2; 
+            k2 = 1; 
+            k3 = 0; 
+            s0 = 1.0f; 
+            s1 = 1.0f; 
+            s2 = 1.0f; 
+        } else if ( m[0 * 4 + 0] > m[1 * 4 + 1] && m[0 * 4 + 0] > m[2 * 4 + 2] ) { 
+            k0 = 0; 
+            k1 = 1; 
+            k2 = 2; 
+            k3 = 3; 
+            s0 = 1.0f; 
+            s1 = -1.0f; 
+            s2 = -1.0f; 
+        } else if ( m[1 * 4 + 1] > m[2 * 4 + 2] ) { 
+            k0 = 1; 
+            k1 = 0; 
+            k2 = 3; 
+            k3 = 2; 
+            s0 = -1.0f; 
+            s1 = 1.0f; 
+            s2 = -1.0f; 
+        } else { 
+            k0 = 2; 
+            k1 = 3; 
+            k2 = 0; 
+            k3 = 1; 
+            s0 = -1.0f; 
+            s1 = -1.0f; 
+            s2 = 1.0f; 
+        } 
+        float t = s0 * m[0 * 4 + 0] + s1 * m[1 * 4 + 1] + s2 * m[2 * 4 + 2] + 1.0f; 
+        float s = ReciprocalSqrt( t ) * 0.5f; 
+        q[k0] = s * t; 
+        q[k1] = ( m[0 * 4 + 1] - s2 * m[1 * 4 + 0] ) * s; 
+        q[k2] = ( m[2 * 4 + 0] - s1 * m[0 * 4 + 2] ) * s; 
+        q[k3] = ( m[1 * 4 + 2] - s0 * m[2 * 4 + 1] ) * s; 
+        q[4] = m[0 * 4 + 3]; 
+        q[5] = m[1 * 4 + 3]; 
+        q[6] = m[2 * 4 + 3]; 
+        q[7] = 0.0f; 
+    } 
+}
+  */
   //https://keithmaggio.wordpress.com/2011/02/15/math-magician-lerp-slerp-and-nlerp/
   //http://physicsforgames.blogspot.co.at/2010/02/quaternions.html
   //http://number-none.com/product/Understanding%20Slerp,%20Then%20Not%20Using%20It/
@@ -372,7 +432,7 @@ var Quaternion = {
       blendI * z1 + blendFactor * z2
     ]);
   },
-  wxyzToMat4: function(w, x, y, z) {
+  fromWXYZ: function(w, x, y, z) {
     return [
       1 - 2 * y * y - 2 * z * z, 2 * x * y - 2 * w * z, 2 * x * z + 2 * w * y, 0,
       2 * x * y + 2 * w * z, 1 - 2 * x * x - 2 * z * z, 2 * y * z + 2 * w * x, 0,
@@ -445,7 +505,7 @@ var Quaternion = {
       (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
     ];
   },
-  xyzAngleToQuaternion: function(axisX, axisY, axisZ, angle) {
+  fromXYZAngle: function(axisX, axisY, axisZ, angle) {
     return [
       Math.cos(angle / 2),
       axisX * Math.sin(angle / 2),
@@ -475,17 +535,33 @@ var Quaternion = {
     return number < 0.99 || number > 1.01;
   }
 };
+
+var DualQuat = {
+  // input: unit quaternion 'q0', translation vector 't' 
+  // output: unit dual quaternion 'dq'
+  fromQuatTrans: function(q0, t) {
+    var dq = [];
+    // non-dual part (just copy q0):
+    for (var i = 0; i < 4; i++) dq[i] = q0[i];
+    // dual part:
+    dq[4] = -0.5 * (t[0] * q0[1] + t[1] * q0[2] + t[2] * q0[3]);
+    dq[5] = 0.5 * (t[0] * q0[0] + t[1] * q0[3] - t[2] * q0[2]);
+    dq[6] = 0.5 * (-t[0] * q0[3] + t[1] * q0[0] + t[2] * q0[1]);
+    dq[7] = 0.5 * (t[0] * q0[2] - t[1] * q0[1] + t[2] * q0[0]);
+    return dq;
+  }
+};
 //Called by the body
 function start() {
-  console.log = (s) => {
-    alert(s.toString())
+  /*console.log = (s) => {
+    alert(s.toString());
   };
   console.info = (s) => {
-    alert(s.toString())
+    alert(s.toString());
   };
   console.warn = (s) => {
-    alert(s.toString())
-  };
+    alert(s.toString());
+  };*/
 
   initCanvas("glcanvas");
   initSidebar();
@@ -685,32 +761,45 @@ function redraw() {
   window.requestAnimationFrame(redraw);
 }
 
-var currAnimation = "bindpose";
+var animationName = "nod"; //TODO a changeanimation function
 
 /**
  * Applies a step of an animation. Returns true, if it reached the end
  */
 function animationStep(animationName) {
   var a = animations[animationName];
-  //Special case
+
   if (a.frame == 0) {
-
-  } else {
-    //The 2 keyframes
-    var keyframe1 = a.keyframes[a.frame << 0];
-    var keyframe2 = a.keyframes[(a.frame << 0) + 1];
-
-    var interpolationFactor = a.frame % 1; //Really cool
-    //For each bone in the animation
+    a.prevKeyframe = [];
     for (var i = 0; i < a.usedBones.length; i++) {
       var boneIndex = a.usedBones[i];
-      bones[boneIndex].qRot = Quaternion.nlerp1(
-        keyframe1[i], keyframe2[i], interpolationFactor);
+      a.prevKeyframe[i] = bones[boneIndex].qRot;
     }
+
+  }
+
+
+  //The 2 keyframes
+  var keyframe1;
+
+  if (a.frame >= 1) { //Normal animation
+    keyframe1 = a.keyframes[(a.frame << 0) - 1];
+  } else { //Special case, interpolate with prev animation
+    keyframe1 = a.prevKeyframe;
+  }
+
+  var keyframe2 = a.keyframes[(a.frame << 0) % a.keyframes.length];
+
+  var interpolationFactor = a.frame % 1; //Really cool
+  //For each bone in the animation
+  for (var i = 0; i < a.usedBones.length; i++) {
+    var boneIndex = a.usedBones[i];
+    bones[boneIndex].qRot = Quaternion.nlerp1(
+      keyframe1[i], keyframe2[i], interpolationFactor);
   }
 
   a.frame += 0.05;
-  if (a.frame >= a.keyframes.length - 1) {
+  if (a.frame >= a.keyframes.length) {
     a.frame = 0;
     return true;
   }
@@ -719,7 +808,7 @@ function animationStep(animationName) {
 
 function calculateBones() {
   var boneMat = [];
-  animationStep(currAnimation);
+  animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions
@@ -1022,7 +1111,7 @@ function setUpBones() {
     }
   }
   animations.bindpose = {};
-  animations.bindpose.frame = 0;
+  animations.bindpose.frame = 1;
   animations.bindpose.usedBones = [];
   animations.bindpose.keyframes = [
     []
