@@ -71,6 +71,7 @@ var rigging = false;
 
 //Called by the body
 function start() {
+  //window.onerror
   /*console.log = (s) => {
     alert(s.toString());
   };
@@ -326,29 +327,30 @@ function animationStep(animationName) {
 
 function calculateBones() {
   var boneMat = [];
-  animationStep(animationName);
+  //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions
-    if (Quat.needsNormalisation(bones[i].qRot)) bones[i].qRot = Quat.normalize(bones[i].qRot);
-    var localMat = Mat4.multiply(
-      Quat.toMat4(bones[i].qRot),
-      Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
-    );
+    bones[i].dq.normalize();
+    var localDualQuat = bones[i].dq.copy();
+    /* Mat4.multiply(
+          Quat.toMat4(bones[i].qRot),
+          Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
+        );*/
 
     //Root bone
     if (bones[i].parent == -1) {
-      bones[i].worldMat = localMat;
+      bones[i].worldDualQuat = localDualQuat;
     } else {
-      if (bones[bones[i].parent].worldMat == undefined) {
+      if (bones[bones[i].parent].worldDualQuat == undefined) {
         console.log(i);
       }
 
-      bones[i].worldMat = Mat4.multiply(localMat, bones[bones[i].parent].worldMat);
+      bones[i].worldDualQuat = localDualQuat.multiply(bones[bones[i].parent].worldDualQuat);
     }
-    boneMat[i] = Mat4.multiply(bones[i].boneMat, bones[i].worldMat);
+    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toMat4();
   }
-  return [].concat.apply([], boneMat);
+  return [].concat.apply([], boneMat); //Flatten it for OpenGL
 }
 
 function boneByName(name) {
@@ -620,6 +622,7 @@ function setUpBones() {
     bones[i].dq.fromQuatTrans(bones[i].qRot, bones[i].pos);
     bones[i].dqInverseBindpose = new DualQuat();
     bones[i].dqInverseBindpose.fromQuatTrans(bones[i].offsetRot, bones[i].offsetPos);
+    bones[i].dqInverseBindpose.normalize();
     if (bones[i].pos == undefined) {
       bones[i].pos = [0, 0, 0];
     }

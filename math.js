@@ -285,7 +285,7 @@ var Quat = {
     },
     needsNormalisation: function(q) {
         var length = Quat.lengthSqrt(q);
-        return length < 0.99 || length > 1.01;
+        return length < 0.999 || length > 1.001;
     },
     normalize: function(q) {
         var length = Quat.length(q);
@@ -362,6 +362,7 @@ function DualQuat(real, dual) {
 DualQuat.prototype.conjugate = function() {
     this.real = Quat.conjugate(this.real);
     this.dual = Quat.conjugate(this.dual);
+    return this;
 };
 
 DualQuat.prototype.copy = function() {
@@ -370,8 +371,8 @@ DualQuat.prototype.copy = function() {
 
 DualQuat.prototype.getTranslation = function() {
     var t = Quat.multiply(
-        Quat.multiplyScalar(this.dual.slice(), 2),
-        Quat.conjugate(this.real.slice())
+        Quat.multiplyScalar(this.dual, 2),
+        Quat.conjugate(this.real)
     );
     return [t[1], t[2], t[3]];
 };
@@ -379,10 +380,14 @@ DualQuat.prototype.getTranslation = function() {
  * output: unit dual quaternion 'dq'
  */
 DualQuat.prototype.fromQuatTrans = function(q0, t) {
+    if (Quat.needsNormalisation(q0)) q0 = Quat.normalize(q0);
     // non-dual part (just copy q0):
     this.real = q0.slice();
     // dual part:
-    this.dual = Quat.multiplyScalar(Quat.multiply([0, t[0], t[1], t[2]], this.real), 0.5);
+    this.dual = Quat.multiplyScalar(
+        Quat.multiply([0, t[0], t[1], t[2]], this.real),
+        0.5);
+    return this;
 };
 
 DualQuat.prototype.dot = function(dq) {
@@ -391,26 +396,30 @@ DualQuat.prototype.dot = function(dq) {
 
 DualQuat.prototype.normalize = function() {
     var magnitude = Quat.length(this.real);
-    if (magnitude < 0.99 || magnitude > 1.01) {
-        this.real.multiplyScalar(1.0 / magnitude);
-        this.dual.multiplyScalar(1.0 / magnitude);
+    if (magnitude < 0.999 || magnitude > 1.001) {
+        this.multiplyScalar(1.0 / magnitude);
     }
 };
 
 DualQuat.prototype.multiplyScalar = function(scalar) {
     this.real = Quat.multiplyScalar(this.real, scalar);
     this.dual = Quat.multiplyScalar(this.dual, scalar);
+    return this;
 };
 
 DualQuat.prototype.add = function(dq) {
     this.real = Quat.add(this.real, dq.real);
     this.dual = Quat.add(this.dual, dq.dual);
+    return this;
 };
 
 DualQuat.prototype.multiply = function(dq) {
-    var real = real.slice();
-    this.real = Quat.multiply(this.real, dq.real);
-    this.dual = Quat.multiply(dq.dual, real) + Quat.multiply(dq.real, this.dual);
+    var real = this.real.slice();
+    this.real = Quat.multiply(dq.real, this.real);
+    this.dual = Quat.add(
+        Quat.multiply(dq.dual, real),
+        Quat.multiply(dq.real, this.dual));
+    return this;
 };
 
 DualQuat.prototype.toMat4 = function() {
@@ -428,11 +437,74 @@ DualQuat.prototype.toMat4 = function() {
     var yw = Y * W;
     var yz = Y * Z;
     var xw = X * W;
-    var translation = DualQuat.getTranslation();
+    var translation = this.getTranslation();
     return [
         1.0 - (2.0 * (yy + zz)), 2.0 * (xy + zw), 2.0 * (zx - yw), 0,
         2.0 * (xy - zw), 1.0 - (2.0 * (zz + xx)), 2.0 * (yz + xw), 0,
         2.0 * (zx + yw), 2.0 * (yz - xw), 1.0 - (2.0 * (yy + xx)), 0,
         translation[0], translation[1], translation[2], 1
-    ];
+    ];/*
+    var w = this.real[0],
+        x = this.real[1],
+        y = this.real[2],
+        z = this.real[3];
+
+    var matrix = Mat4.identity();
+    var x2 = x + x,
+        y2 = y + y,
+        z2 = z + z;
+    var xx = x * x2,
+        xy = x * y2,
+        xz = x * z2;
+    var yy = y * y2,
+        yz = y * z2,
+        zz = z * z2;
+    var wx = w * x2,
+        wy = w * y2,
+        wz = w * z2;
+
+    matrix[0] = 1 - (yy + zz);
+    matrix[4] = xy - wz;
+    matrix[8] = xz + wy;
+
+    matrix[1] = xy + wz;
+    matrix[5] = 1 - (xx + zz);
+    matrix[9] = yz - wx;
+
+    matrix[2] = xz - wy;
+    matrix[6] = yz + wx;
+    matrix[10] = 1 - (xx + yy);
+
+    // last column
+    matrix[3] = 0;
+    matrix[7] = 0;
+    matrix[11] = 0;
+    var translation = this.getTranslation();
+
+    // bottom row
+    matrix[12] = translation[0];
+    matrix[13] = translation[1];
+    matrix[14] = translation[2];
+    matrix[15] = 1;
+    return matrix;*/
 };
+
+DualQuat.prototype.setRotationUnoptimized = function(q) {
+    var pos = this.getTranslation();
+    this.real = [q[0], q[1], q[2], q[3]];
+    this.dual = [0, 0, 0, 0];
+    this.dual = Quat.multiplyScalar(
+        Quat.multiply([0, pos[0], pos[1], pos[2]], this.real),
+        0.5);
+    
+    return this;
+};
+
+/*
+    public DualQuaternion setRotation(Quaternion q) {
+
+        Vector3d position = getPosition();
+        makeRotationFromQuaternion(q);
+        return setPosition(position);
+
+}*/
