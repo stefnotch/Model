@@ -41,6 +41,7 @@ function setUpPicker() {
     var shadowVertShader = `
     attribute vec3 a_coordinate;
     attribute float a_bone;
+    attribute float a_boneWeight;
     attribute vec3 a_normal;
     
     uniform mat4 u_matrix; //The Matrix!
@@ -48,7 +49,7 @@ function setUpPicker() {
     
     varying float v_boneID;
     void main(void){
-      gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate, 1);
+      gl_Position = u_matrix * u_bones[int(a_bone)]  * a_boneWeight * vec4(a_coordinate, 1);
       v_boneID = a_bone;
     }`;
 

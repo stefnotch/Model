@@ -4,6 +4,7 @@ git push
 */
 /*global model bones setUpPicker pickPixel initSidebar animations*/
 /*global Mat4 Quat DualQuat*/
+//cgc -entry dqsFast -profile glslv -profileopts version=120 C:\Users\stefan\Downloads\Skinning\test.cg
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
 //https://docs.google.com/presentation/d/12AGAUmElB0oOBgbEEBfhABkIMCL3CUX7kdAPLuwZ964/edit#slide=id.i51
@@ -96,6 +97,7 @@ function start() {
     var celLineVertexShader = `
     attribute vec3 a_coordinate;
     attribute float a_bone;
+    attribute float a_boneWeight;
     attribute vec3 a_normal;
     
     uniform float u_width;
@@ -103,22 +105,33 @@ function start() {
     uniform mat4 u_bones[113];
     
     void main(void){
-      gl_Position = u_matrix * u_bones[int(a_bone)] * vec4(a_coordinate + a_normal * u_width, 1);
+    mat4 blendDQ = a_boneWeight*u_bones[int(a_bone)];
+	    //blendDQ += IN.weights.y*boneDQ[IN.matrixIndices.y];
+
+	    blendDQ /= length(blendDQ[0]);
+
+	    vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
+	    vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
+	    position += trans;
+
+	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
+
+      gl_Position = u_matrix * vec4(position + normal * u_width, 1);
 
     }`;
 
     var celLineFragmentShader = `
     precision mediump float;
-
     void main() {
       gl_FragColor = vec4(0,0,0, 1);  // black
     }`;
 
     celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader);
-
+/*
     var vertexShader = `
     attribute vec3 a_coordinate;
-    attribute float a_bone;
+    attribute vec2 a_bone;
+    attribute vec2 a_boneWeight;
     attribute vec3 a_normal;
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
@@ -128,20 +141,130 @@ function start() {
     varying vec3 v_normal;
     varying vec3 v_bary;
     
-    vec3 qtransform( vec4 q, vec3 v ){ 
-	    return v + 2.0*cross(cross(v, q.xyz ) + q.w*v, q.xyz);
-	  }
+    
+    mat4 DQToMatrix(vec4 Qn, vec4 Qd)
+    {	
+    	mat4 M = mat4(1.0,0.0,0.0,0.0,
+    	0.0,1.0,0.0,0.0,
+    	0.0,0.0,1.0,0.0,
+    	0.0,0.0,0.0,1.0
+    	);
+    	float len2 = dot(Qn, Qn);
+    	float w = Qn.x, x = Qn.y, y = Qn.z, z = Qn.w;
+    	float t0 = Qd.x, t1 = Qd.y, t2 = Qd.z, t3 = Qd.w;
+    		
+    	M[0][0] = w*w + x*x - y*y - z*z; M[1][0] = 2.0*x*y - 2.0*w*z; M[2][0] = 2.0*x*z + 2.0*w*y;
+    	M[0][1] = 2.0*x*y + 2.0*w*z; M[1][1] = w*w + y*y - x*x - z*z; M[2][1] = 2.0*y*z - 2.0*w*x; 
+    	M[0][2] = 2.0*x*z - 2.0*w*y; M[1][2] = 2.0*y*z + 2.0*w*x; M[2][2] = w*w + z*z - x*x - y*y;
+    	
+    	M[3][0] = -2.0*t0*x + 2.0*w*t1 - 2.0*t2*z + 2.0*y*t3;
+    	M[3][1] = -2.0*t0*y + 2.0*t1*z - 2.0*x*t3 + 2.0*w*t2;
+    	M[3][2] = -2.0*t0*z + 2.0*x*t2 + 2.0*w*t3 - 2.0*t1*y;
+
+    	M /= len2;
+    	M[0][3] = 0.0;
+    	M[1][3] = 0.0;
+    	M[2][3] = 0.0;
+    	M[3][3] = 1.0;
+    	return M;	
+    }
     
     void main(void){
-      vec4 vertPos = u_bones[int(a_bone)] * vec4(a_coordinate, 1);
-      gl_Position = u_matrix * vertPos;
+    
+      //mat4 blendDQ = 0.5*u_bones[int(a_bone.x)];
+	    //blendDQ += 0.5*u_bones[int(a_bone.y)];
+	    
+	    mat4 blendDQ = u_bones[int(a_bone.x)];// * a_boneWeight.x;
+      blendDQ += u_bones[int(a_bone.y)]; //* (1.0-a_boneWeight.x);// a_boneWeight.y;
+      
+	    //blendDQ /= length(blendDQ[0]);
+      //blendDQ[2] = vec4(0,0,1.0,0);
+      //blendDQ[3] = vec4(0,0,0,1.0);
+      
+	    //vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
+	    //vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
+	    //position += trans;
+
+	    //vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
+      
+      mat4 M = DQToMatrix(blendDQ[0],blendDQ[1]);
+      
+      vec4 position = vec4(a_coordinate, 1.0) *  M;
+      
+      vec4 normal = vec4(a_normal,0.0) * M;
+      
+      gl_Position = u_matrix * position;
       
       v_textureCoord = a_texcoord;
-      v_normal = vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
+      v_normal = normal.xyz; //vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
       v_bary = a_bary;
     }`;
+*/
 
 
+    var vertexShader = `
+    attribute vec3 a_coordinate;
+    attribute vec2 a_bone;
+    attribute vec2 a_boneWeight;
+    attribute vec3 a_normal;
+    attribute vec2 a_texcoord;
+    attribute vec3 a_bary;
+    uniform mat4 u_matrix; //The Matrix!
+    uniform vec4 u_bones[113 * 2]; //Bones that can be moved
+    varying vec2 v_textureCoord;
+    varying vec3 v_normal;
+    varying vec3 v_bary;
+    
+    void main(void){
+    
+      vec4 blendDQ[2];
+      //if(a_bone.y < -0.4){
+    //  _TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
+    //  _TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
+    //}else{
+    //  _TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)] + 
+    //              (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
+    //  _TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)] + 
+    //              (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 1)];
+    //}
+    
+      blendDQ[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
+      blendDQ[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
+      
+      if((a_boneWeight.x != 0.5) && a_bone.y > 0.0){
+        blendDQ[0] += (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
+        blendDQ[1] += (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 1)];
+      }
+      
+      float len = length(blendDQ[0]);
+	    blendDQ[0] /= len;
+      blendDQ[1] /= len;
+      
+	    vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
+	    vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
+	    position += trans;
+
+	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
+    
+
+    //_TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
+    //_TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
+    //
+    
+    //if(a_boneWeight.x > 0.5){
+    //  _TMP13[0] = _TMP13[0] + (1.0-a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
+    //}else{
+    //  _TMP13[0] = (1.0-a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
+    //}
+    
+      //Matrix multiplication order!
+      gl_Position = u_matrix * vec4(position, 1.0);
+      v_normal = normal;
+      
+      v_textureCoord = a_texcoord;
+      v_bary = a_bary;
+    }`;
+    
     //Anime has exactly 2 different shadings, light OR dark
     var fragmentShader = `
     #extension GL_OES_standard_derivatives : enable
@@ -217,10 +340,10 @@ function redraw() {
     //pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
     //mouse.X / glcanvas.clientWidth;
     //-mouse.Y / glcanvas.clientHeight;
-    pickPixel(objectsToDraw,
+    /*pickPixel(objectsToDraw,
       Mat4.multiply(matrix,
         Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, (1 - mouse.Y / glcanvas.clientHeight) * -2, 0)
-      ), boneMat);
+      ), boneMat);*/
     mouse.clicked = false;
   }
   //
@@ -232,10 +355,10 @@ function redraw() {
 
   //Check what is faster: moving this into the other loop or leaving it this way
   //What shader program
-  gl.useProgram(celLineShader.prog);
+  /*gl.useProgram(celLineShader.prog);
   //Uniforms such as the matrix
   gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
-  gl.uniformMatrix4fv(celLineShader.uniforms["u_bones[0]"], false, boneMat);
+  gl.uniform4fv(celLineShader.uniforms["u_bones[0]"], boneMat);
   gl.uniform1f(celLineShader.uniforms["u_width"], 0.005);
   objectsToDraw.forEach((object) => {
     //Bind VAO
@@ -244,7 +367,7 @@ function redraw() {
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);
   });
-
+*/
   gl.cullFace(gl.BACK);
   var prevShaderProg = objectsToDraw[0].shaderProgram;
   gl.useProgram(prevShaderProg.prog);
@@ -263,8 +386,8 @@ function redraw() {
 
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_matrix"], false, matrix);
+    gl.uniform4fv(object.shaderProgram.uniforms["u_bones[0]"], boneMat);
     gl.uniform3fv(object.shaderProgram.uniforms["u_light"], lightRot);
-    gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_bones[0]"], false, boneMat);
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
 
@@ -348,7 +471,7 @@ function calculateBones() {
 
       bones[i].worldDualQuat = localDualQuat.multiply(bones[bones[i].parent].worldDualQuat);
     }
-    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toMat4();
+    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toArray();//.toMat4();
   }
   return [].concat.apply([], boneMat); //Flatten it for OpenGL
 }
@@ -360,6 +483,132 @@ function boneByName(name) {
       return i;
     }
   }
+}
+
+
+/**
+ * Creates a shader and returns it.
+ * Tries to figure out the type if not specified.
+ */
+function createShader(shaderCode, shaderType) {
+  if (shaderType == undefined) {
+    //Vertex shader
+    if (shaderCode.indexOf("gl_Position") >= 0) {
+      shaderType = gl.VERTEX_SHADER;
+    } else {
+      shaderType = gl.FRAGMENT_SHADER;
+    }
+  }
+  var shader = gl.createShader(shaderType);
+  gl.shaderSource(shader, shaderCode);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.trace();
+    throw new Error(gl.getShaderInfoLog(shader));
+
+  }
+
+  return shader;
+}
+
+function ShaderProg(vertexShader, fragmentShader) {
+  // Put the vertex shader and fragment shader together into
+  // a complete program
+  var shaderProgram = gl.createProgram();
+  gl.attachShader(shaderProgram, createShader(vertexShader, gl.VERTEX_SHADER));
+  gl.attachShader(shaderProgram, createShader(fragmentShader, gl.FRAGMENT_SHADER));
+  gl.linkProgram(shaderProgram);
+  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+    throw new Error(gl.getProgramInfoLog(shaderProgram));
+
+  this.uniforms = {};
+
+  /* var na = gl.getProgramParameter(shaderProgram, gl.ACTIVE_ATTRIBUTES);
+console.log(na, 'attributes');
+for (var i = 0; i < na; ++i) {
+  var a = gl.getActiveAttrib(shaderProgram, i);
+  console.log(i, a.size, a.type, a.name);
+}*/
+  var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
+  for (var i = 0; i < nu; ++i) {
+    var uniformName = gl.getActiveUniform(shaderProgram, i).name;
+    if (uniformName.indexOf("texture") == -1) {
+      this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+    }
+  }
+
+  this.prog = shaderProgram;
+}
+
+/**
+ * Sets the current attributes for a given shader
+ * attributes: object with names, number of components and normalize
+ * Returns the number of attributes
+ */
+function setAttributes(attributes, shaderProgram, offset) {
+  offset = offset == undefined ? 0 : offset;
+  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
+  offset (must be a multiple of the type)*/
+  //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
+  var numberOfElements = 0;
+  attributes.forEach(attribute => {
+    numberOfElements += attribute[1];
+  });
+  var prevNumberOfElements = 0;
+  attributes.forEach(attribute => {
+    var att = gl.getAttribLocation(shaderProgram, attribute[0]);
+    gl.enableVertexAttribArray(att);
+    //gl.vertexAttribPointer(index, size, type, normalized, stride, offset);
+    gl.vertexAttribPointer(att, attribute[1], gl.FLOAT, attribute[2], numberOfElements * 4, offset + prevNumberOfElements * 4);
+    prevNumberOfElements += attribute[1];
+  });
+  return numberOfElements;
+  //console.trace();
+  //return positionLocation; //Location of the stuff that is being fed to the shader
+}
+/**
+ * Creates an object (VAO) to draw
+ */
+function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
+  //Create VAO
+  var vao = vaoExt.createVertexArrayOES();
+  // Start setting up VAO
+  vaoExt.bindVertexArrayOES(vao);
+  //Create a VBO
+  var buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+
+  //CO, UV, NORMALS
+  var numberOfAttributes = setAttributes([
+    ["a_coordinate", 3, false],
+    ["a_texcoord", 2, true],
+    ["a_normal", 3, true],
+    ["a_bary", 3, false],
+    ["a_bone", 2, false],
+    ["a_boneWeight", 2, true]
+  ], shaderProgram.prog, 4);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
+
+  var textureUniforms = [];
+  for (var i = 0; i < textures.uniforms.length; i++) {
+    //Shader program texture index
+    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]), i);
+  }
+
+  vaoExt.bindVertexArrayOES(null);
+
+  return {
+    shaderProgram: shaderProgram,
+    vao: vao,
+    bufferLength: (3 * object.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
+    textures: loadTextures(textures.locations, "Model/" + name),
+    textureUniforms: textureUniforms
+  };
+}
+
+function addObjectToDraw(name, shaderProgram, object, textures, boneType) {
+  objectsToDraw.push(
+    createObjectToDraw(name, shaderProgram, object, textures, boneType));
 }
 
 /**
@@ -433,129 +682,6 @@ function nextHighestPowerOfTwo(x) {
     x = x | x >> i;
   }
   return x + 1;
-}
-
-/**
- * Creates a shader and returns it.
- * Tries to figure out the type if not specified.
- */
-function createShader(shaderCode, shaderType) {
-  if (shaderType == undefined) {
-    //Vertex shader
-    if (shaderCode.indexOf("gl_Position") >= 0) {
-      shaderType = gl.VERTEX_SHADER;
-    } else {
-      shaderType = gl.FRAGMENT_SHADER;
-    }
-  }
-  var shader = gl.createShader(shaderType);
-  gl.shaderSource(shader, shaderCode);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.trace();
-    throw new Error(gl.getShaderInfoLog(shader));
-
-  }
-
-  return shader;
-}
-
-function ShaderProg(vertexShader, fragmentShader) {
-  // Put the vertex shader and fragment shader together into
-  // a complete program
-  var shaderProgram = gl.createProgram();
-  gl.attachShader(shaderProgram, createShader(vertexShader, gl.VERTEX_SHADER));
-  gl.attachShader(shaderProgram, createShader(fragmentShader, gl.FRAGMENT_SHADER));
-  gl.linkProgram(shaderProgram);
-  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
-    throw new Error(gl.getProgramInfoLog(shaderProgram));
-
-  this.uniforms = {};
-
-  /* var na = gl.getProgramParameter(shaderProgram, gl.ACTIVE_ATTRIBUTES);
-console.log(na, 'attributes');
-for (var i = 0; i < na; ++i) {
-  var a = gl.getActiveAttrib(shaderProgram, i);
-  console.log(i, a.size, a.type, a.name);
-}*/
-  var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
-  for (var i = 0; i < nu; ++i) {
-    var uniformName = gl.getActiveUniform(shaderProgram, i).name;
-    if (uniformName.indexOf("texture") == -1) {
-      this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
-    }
-  }
-
-  this.prog = shaderProgram;
-}
-
-/**
- * Sets the current attributes for a given shader
- * attributes: object with names, number of components and normalize
- */
-function setAttributes(attributes, shaderProgram, offset) {
-  offset = offset == undefined ? 0 : offset;
-  /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
-  offset (must be a multiple of the type)*/
-  //Stride: 3*vertex, 2*uv, 3*normal,3*bary,1*bone index
-  var numberOfElements = 0;
-  attributes.forEach(attribute => {
-    numberOfElements += attribute[1];
-  });
-  var prevNumberOfElements = 0;
-  attributes.forEach(attribute => {
-    var att = gl.getAttribLocation(shaderProgram, attribute[0]);
-    gl.enableVertexAttribArray(att);
-    //gl.vertexAttribPointer(index, size, type, normalized, stride, offset);
-    gl.vertexAttribPointer(att, attribute[1], gl.FLOAT, attribute[2], numberOfElements * 4, offset + prevNumberOfElements * 4);
-    prevNumberOfElements += attribute[1];
-  });
-
-  //console.trace();
-  //return positionLocation; //Location of the stuff that is being fed to the shader
-}
-/**
- * Creates an object (VAO) to draw
- */
-function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
-  //Create VAO
-  var vao = vaoExt.createVertexArrayOES();
-  // Start setting up VAO
-  vaoExt.bindVertexArrayOES(vao);
-  //Create a VBO
-  var buffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-
-  //CO, UV, NORMALS
-  setAttributes([
-    ["a_coordinate", 3, false],
-    ["a_texcoord", 2, true],
-    ["a_normal", 3, true],
-    ["a_bary", 3, false],
-    ["a_bone", 1, true]
-  ], shaderProgram.prog, 4);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
-
-  var textureUniforms = [];
-  for (var i = 0; i < textures.uniforms.length; i++) {
-    //Shader program texture index
-    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]), i);
-  }
-
-  vaoExt.bindVertexArrayOES(null);
-
-  return {
-    shaderProgram: shaderProgram,
-    vao: vao,
-    bufferLength: (object.length - (2 * (object.length / 12)) - (3 * (object.length / 12)) - (3 * (object.length / 12)) - (1 * (object.length / 12))), //Subtract the UVs, subtract the vertex normals
-    textures: loadTextures(textures.locations, "Model/" + name),
-    textureUniforms: textureUniforms
-  };
-}
-
-function addObjectToDraw(name, shaderProgram, object, textures, boneType) {
-  objectsToDraw.push(
-    createObjectToDraw(name, shaderProgram, object, textures, boneType));
 }
 
 //Init functions

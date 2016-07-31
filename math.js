@@ -421,6 +421,21 @@ DualQuat.prototype.multiply = function(dq) {
         Quat.multiply(dq.real, this.dual));
     return this;
 };
+DualQuat.prototype.toFAKEMat4 = function() {
+    return [
+        this.real[0],this.real[1],this.real[2],this.real[3],
+        this.dual[0],this.dual[1],this.dual[2],this.dual[3],
+        0,0,1,0,
+        0,0,0, 1
+    ];
+}
+
+DualQuat.prototype.toArray = function() {
+    return [
+        this.real[0],this.real[1],this.real[2],this.real[3],
+        this.dual[0],this.dual[1],this.dual[2],this.dual[3],
+    ];
+}
 
 DualQuat.prototype.toMat4 = function() {
     var W = this.real[0],
