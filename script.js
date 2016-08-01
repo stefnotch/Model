@@ -96,27 +96,33 @@ function start() {
     gl.getExtension("OES_standard_derivatives");
     var celLineVertexShader = `
     attribute vec3 a_coordinate;
-    attribute float a_bone;
+    attribute vec2 a_bone;
     attribute float a_boneWeight;
     attribute vec3 a_normal;
     
     uniform float u_width;
     uniform mat4 u_matrix; //The Matrix!
-    uniform mat4 u_bones[113];
+    uniform vec4 u_bones[113 * 2]; //Bones that can be moved
     
     void main(void){
-    mat4 blendDQ = a_boneWeight*u_bones[int(a_bone)];
-	    //blendDQ += IN.weights.y*boneDQ[IN.matrixIndices.y];
+    vec4 blendDQ[2];
 
-	    blendDQ /= length(blendDQ[0]);
-
+      blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
+      blendDQ[1] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 1)];
+      blendDQ[0] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 0)];
+      blendDQ[1] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 1)];
+        
+      float len = length(blendDQ[0]);
+	    blendDQ[0] /= len;
+      blendDQ[1] /= len;
+      
 	    vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
 	    vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
 	    position += trans;
 
 	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
-
-      gl_Position = u_matrix * vec4(position + normal * u_width, 1);
+    
+      gl_Position = u_matrix * vec4(position + normal * u_width, 1.0);
 
     }`;
 
@@ -127,85 +133,85 @@ function start() {
     }`;
 
     celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader);
-/*
+    /*
+        var vertexShader = `
+        attribute vec3 a_coordinate;
+        attribute vec2 a_bone;
+        attribute vec2 a_boneWeight;
+        attribute vec3 a_normal;
+        attribute vec2 a_texcoord;
+        attribute vec3 a_bary;
+        uniform mat4 u_matrix; //The Matrix!
+        uniform mat4 u_bones[113]; //Bones that can be moved
+        varying vec2 v_textureCoord;
+        varying vec3 v_normal;
+        varying vec3 v_bary;
+        
+        
+        mat4 DQToMatrix(vec4 Qn, vec4 Qd)
+        {	
+        	mat4 M = mat4(1.0,0.0,0.0,0.0,
+        	0.0,1.0,0.0,0.0,
+        	0.0,0.0,1.0,0.0,
+        	0.0,0.0,0.0,1.0
+        	);
+        	float len2 = dot(Qn, Qn);
+        	float w = Qn.x, x = Qn.y, y = Qn.z, z = Qn.w;
+        	float t0 = Qd.x, t1 = Qd.y, t2 = Qd.z, t3 = Qd.w;
+        		
+        	M[0][0] = w*w + x*x - y*y - z*z; M[1][0] = 2.0*x*y - 2.0*w*z; M[2][0] = 2.0*x*z + 2.0*w*y;
+        	M[0][1] = 2.0*x*y + 2.0*w*z; M[1][1] = w*w + y*y - x*x - z*z; M[2][1] = 2.0*y*z - 2.0*w*x; 
+        	M[0][2] = 2.0*x*z - 2.0*w*y; M[1][2] = 2.0*y*z + 2.0*w*x; M[2][2] = w*w + z*z - x*x - y*y;
+        	
+        	M[3][0] = -2.0*t0*x + 2.0*w*t1 - 2.0*t2*z + 2.0*y*t3;
+        	M[3][1] = -2.0*t0*y + 2.0*t1*z - 2.0*x*t3 + 2.0*w*t2;
+        	M[3][2] = -2.0*t0*z + 2.0*x*t2 + 2.0*w*t3 - 2.0*t1*y;
+
+        	M /= len2;
+        	M[0][3] = 0.0;
+        	M[1][3] = 0.0;
+        	M[2][3] = 0.0;
+        	M[3][3] = 1.0;
+        	return M;	
+        }
+        
+        void main(void){
+        
+          //mat4 blendDQ = 0.5*u_bones[int(a_bone.x)];
+    	    //blendDQ += 0.5*u_bones[int(a_bone.y)];
+    	    
+    	    mat4 blendDQ = u_bones[int(a_bone.x)];// * a_boneWeight.x;
+          blendDQ += u_bones[int(a_bone.y)]; //* (1.0-a_boneWeight.x);// a_boneWeight.y;
+          
+    	    //blendDQ /= length(blendDQ[0]);
+          //blendDQ[2] = vec4(0,0,1.0,0);
+          //blendDQ[3] = vec4(0,0,0,1.0);
+          
+    	    //vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
+    	    //vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
+    	    //position += trans;
+
+    	    //vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
+          
+          mat4 M = DQToMatrix(blendDQ[0],blendDQ[1]);
+          
+          vec4 position = vec4(a_coordinate, 1.0) *  M;
+          
+          vec4 normal = vec4(a_normal,0.0) * M;
+          
+          gl_Position = u_matrix * position;
+          
+          v_textureCoord = a_texcoord;
+          v_normal = normal.xyz; //vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
+          v_bary = a_bary;
+        }`;
+    */
+
+
     var vertexShader = `
     attribute vec3 a_coordinate;
     attribute vec2 a_bone;
-    attribute vec2 a_boneWeight;
-    attribute vec3 a_normal;
-    attribute vec2 a_texcoord;
-    attribute vec3 a_bary;
-    uniform mat4 u_matrix; //The Matrix!
-    uniform mat4 u_bones[113]; //Bones that can be moved
-    varying vec2 v_textureCoord;
-    varying vec3 v_normal;
-    varying vec3 v_bary;
-    
-    
-    mat4 DQToMatrix(vec4 Qn, vec4 Qd)
-    {	
-    	mat4 M = mat4(1.0,0.0,0.0,0.0,
-    	0.0,1.0,0.0,0.0,
-    	0.0,0.0,1.0,0.0,
-    	0.0,0.0,0.0,1.0
-    	);
-    	float len2 = dot(Qn, Qn);
-    	float w = Qn.x, x = Qn.y, y = Qn.z, z = Qn.w;
-    	float t0 = Qd.x, t1 = Qd.y, t2 = Qd.z, t3 = Qd.w;
-    		
-    	M[0][0] = w*w + x*x - y*y - z*z; M[1][0] = 2.0*x*y - 2.0*w*z; M[2][0] = 2.0*x*z + 2.0*w*y;
-    	M[0][1] = 2.0*x*y + 2.0*w*z; M[1][1] = w*w + y*y - x*x - z*z; M[2][1] = 2.0*y*z - 2.0*w*x; 
-    	M[0][2] = 2.0*x*z - 2.0*w*y; M[1][2] = 2.0*y*z + 2.0*w*x; M[2][2] = w*w + z*z - x*x - y*y;
-    	
-    	M[3][0] = -2.0*t0*x + 2.0*w*t1 - 2.0*t2*z + 2.0*y*t3;
-    	M[3][1] = -2.0*t0*y + 2.0*t1*z - 2.0*x*t3 + 2.0*w*t2;
-    	M[3][2] = -2.0*t0*z + 2.0*x*t2 + 2.0*w*t3 - 2.0*t1*y;
-
-    	M /= len2;
-    	M[0][3] = 0.0;
-    	M[1][3] = 0.0;
-    	M[2][3] = 0.0;
-    	M[3][3] = 1.0;
-    	return M;	
-    }
-    
-    void main(void){
-    
-      //mat4 blendDQ = 0.5*u_bones[int(a_bone.x)];
-	    //blendDQ += 0.5*u_bones[int(a_bone.y)];
-	    
-	    mat4 blendDQ = u_bones[int(a_bone.x)];// * a_boneWeight.x;
-      blendDQ += u_bones[int(a_bone.y)]; //* (1.0-a_boneWeight.x);// a_boneWeight.y;
-      
-	    //blendDQ /= length(blendDQ[0]);
-      //blendDQ[2] = vec4(0,0,1.0,0);
-      //blendDQ[3] = vec4(0,0,0,1.0);
-      
-	    //vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
-	    //vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
-	    //position += trans;
-
-	    //vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
-      
-      mat4 M = DQToMatrix(blendDQ[0],blendDQ[1]);
-      
-      vec4 position = vec4(a_coordinate, 1.0) *  M;
-      
-      vec4 normal = vec4(a_normal,0.0) * M;
-      
-      gl_Position = u_matrix * position;
-      
-      v_textureCoord = a_texcoord;
-      v_normal = normal.xyz; //vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
-      v_bary = a_bary;
-    }`;
-*/
-
-
-    var vertexShader = `
-    attribute vec3 a_coordinate;
-    attribute vec2 a_bone;
-    attribute vec2 a_boneWeight;
+    attribute float a_boneWeight;
     attribute vec3 a_normal;
     attribute vec2 a_texcoord;
     attribute vec3 a_bary;
@@ -218,23 +224,14 @@ function start() {
     void main(void){
     
       vec4 blendDQ[2];
-      //if(a_bone.y < -0.4){
-    //  _TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
-    //  _TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
-    //}else{
-    //  _TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)] + 
-    //              (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
-    //  _TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)] + 
-    //              (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 1)];
-    //}
-    
-      blendDQ[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
-      blendDQ[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
+
+      blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
+      blendDQ[1] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 1)];
       
-      if((a_boneWeight.x != 0.5) && a_bone.y > 0.0){
-        blendDQ[0] += (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
-        blendDQ[1] += (1.0 - a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 1)];
-      }
+      //if((a_boneWeight != 0.5)){
+        blendDQ[0] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 0)];
+        blendDQ[1] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 1)];
+      //}
       
       float len = length(blendDQ[0]);
 	    blendDQ[0] /= len;
@@ -246,17 +243,6 @@ function start() {
 
 	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
     
-
-    //_TMP13[0] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 0)];
-    //_TMP13[1] = (a_boneWeight.x)*u_bones[(2*int(a_bone.x) + 1)];
-    //
-    
-    //if(a_boneWeight.x > 0.5){
-    //  _TMP13[0] = _TMP13[0] + (1.0-a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
-    //}else{
-    //  _TMP13[0] = (1.0-a_boneWeight.x)*u_bones[(2*int(a_bone.y) + 0)];
-    //}
-    
       //Matrix multiplication order!
       gl_Position = u_matrix * vec4(position, 1.0);
       v_normal = normal;
@@ -264,7 +250,7 @@ function start() {
       v_textureCoord = a_texcoord;
       v_bary = a_bary;
     }`;
-    
+
     //Anime has exactly 2 different shadings, light OR dark
     var fragmentShader = `
     #extension GL_OES_standard_derivatives : enable
@@ -355,7 +341,7 @@ function redraw() {
 
   //Check what is faster: moving this into the other loop or leaving it this way
   //What shader program
-  /*gl.useProgram(celLineShader.prog);
+  gl.useProgram(celLineShader.prog);
   //Uniforms such as the matrix
   gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
   gl.uniform4fv(celLineShader.uniforms["u_bones[0]"], boneMat);
@@ -367,7 +353,7 @@ function redraw() {
     gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
     //vaoExt.bindVertexArrayOES(null);
   });
-*/
+
   gl.cullFace(gl.BACK);
   var prevShaderProg = objectsToDraw[0].shaderProgram;
   gl.useProgram(prevShaderProg.prog);
@@ -471,7 +457,7 @@ function calculateBones() {
 
       bones[i].worldDualQuat = localDualQuat.multiply(bones[bones[i].parent].worldDualQuat);
     }
-    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toArray();//.toMat4();
+    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toArray(); //.toMat4();
   }
   return [].concat.apply([], boneMat); //Flatten it for OpenGL
 }
@@ -585,7 +571,7 @@ function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
     ["a_normal", 3, true],
     ["a_bary", 3, false],
     ["a_bone", 2, false],
-    ["a_boneWeight", 2, true]
+    ["a_boneWeight", 1, true]
   ], shaderProgram.prog, 4);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
