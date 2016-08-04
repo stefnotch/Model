@@ -39,8 +39,12 @@ Matrix inverse
 
 Webgl 2:
 NPOT textures
-https://www.opengl.org/wiki/Uniform_Buffer_Object
+https://www.opengl.org/wiki/Uniform_Buffer_Object (Tons of uniforms)
 Occlusion Queries
+No more VAO extension, it is built in!
+Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
+3D textures (For water and such!)
+Transform feedback
 */
 var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
@@ -90,209 +94,29 @@ function start() {
 
   if (gl) {
     setUpBones();
-    setUpPicker();
+    //setUpPicker();
+    setUpNormalsRenderer();
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
-    var celLineVertexShader = `
-    attribute vec3 a_coordinate;
-    attribute vec2 a_bone;
-    attribute float a_boneWeight;
-    attribute vec3 a_normal;
-    
-    uniform float u_width;
-    uniform mat4 u_matrix; //The Matrix!
-    uniform vec4 u_bones[113 * 2]; //Bones that can be moved
-    
-    void main(void){
-    vec4 blendDQ[2];
-
-      blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
-      blendDQ[1] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 1)];
-      blendDQ[0] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 0)];
-      blendDQ[1] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 1)];
-        
-      float len = length(blendDQ[0]);
-	    blendDQ[0] /= len;
-      blendDQ[1] /= len;
-      
-	    vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
-	    vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
-	    position += trans;
-
-	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
-    
-      gl_Position = u_matrix * vec4(position + normal * u_width, 1.0);
-
-    }`;
 
     var celLineFragmentShader = `
     precision mediump float;
     void main() {
       gl_FragColor = vec4(0,0,0, 1);  // black
     }`;
-
-    celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader);
-    /*
-        var vertexShader = `
-        attribute vec3 a_coordinate;
-        attribute vec2 a_bone;
-        attribute vec2 a_boneWeight;
-        attribute vec3 a_normal;
-        attribute vec2 a_texcoord;
-        attribute vec3 a_bary;
-        uniform mat4 u_matrix; //The Matrix!
-        uniform mat4 u_bones[113]; //Bones that can be moved
-        varying vec2 v_textureCoord;
-        varying vec3 v_normal;
-        varying vec3 v_bary;
-        
-        
-        mat4 DQToMatrix(vec4 Qn, vec4 Qd)
-        {	
-        	mat4 M = mat4(1.0,0.0,0.0,0.0,
-        	0.0,1.0,0.0,0.0,
-        	0.0,0.0,1.0,0.0,
-        	0.0,0.0,0.0,1.0
-        	);
-        	float len2 = dot(Qn, Qn);
-        	float w = Qn.x, x = Qn.y, y = Qn.z, z = Qn.w;
-        	float t0 = Qd.x, t1 = Qd.y, t2 = Qd.z, t3 = Qd.w;
-        		
-        	M[0][0] = w*w + x*x - y*y - z*z; M[1][0] = 2.0*x*y - 2.0*w*z; M[2][0] = 2.0*x*z + 2.0*w*y;
-        	M[0][1] = 2.0*x*y + 2.0*w*z; M[1][1] = w*w + y*y - x*x - z*z; M[2][1] = 2.0*y*z - 2.0*w*x; 
-        	M[0][2] = 2.0*x*z - 2.0*w*y; M[1][2] = 2.0*y*z + 2.0*w*x; M[2][2] = w*w + z*z - x*x - y*y;
-        	
-        	M[3][0] = -2.0*t0*x + 2.0*w*t1 - 2.0*t2*z + 2.0*y*t3;
-        	M[3][1] = -2.0*t0*y + 2.0*t1*z - 2.0*x*t3 + 2.0*w*t2;
-        	M[3][2] = -2.0*t0*z + 2.0*x*t2 + 2.0*w*t3 - 2.0*t1*y;
-
-        	M /= len2;
-        	M[0][3] = 0.0;
-        	M[1][3] = 0.0;
-        	M[2][3] = 0.0;
-        	M[3][3] = 1.0;
-        	return M;	
-        }
-        
-        void main(void){
-        
-          //mat4 blendDQ = 0.5*u_bones[int(a_bone.x)];
-    	    //blendDQ += 0.5*u_bones[int(a_bone.y)];
-    	    
-    	    mat4 blendDQ = u_bones[int(a_bone.x)];// * a_boneWeight.x;
-          blendDQ += u_bones[int(a_bone.y)]; //* (1.0-a_boneWeight.x);// a_boneWeight.y;
-          
-    	    //blendDQ /= length(blendDQ[0]);
-          //blendDQ[2] = vec4(0,0,1.0,0);
-          //blendDQ[3] = vec4(0,0,0,1.0);
-          
-    	    //vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
-    	    //vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
-    	    //position += trans;
-
-    	    //vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
-          
-          mat4 M = DQToMatrix(blendDQ[0],blendDQ[1]);
-          
-          vec4 position = vec4(a_coordinate, 1.0) *  M;
-          
-          vec4 normal = vec4(a_normal,0.0) * M;
-          
-          gl_Position = u_matrix * position;
-          
-          v_textureCoord = a_texcoord;
-          v_normal = normal.xyz; //vec3(u_bones[int(a_bone)] * vec4(a_normal , 1.0)); //Just rotation and translation
-          v_bary = a_bary;
-        }`;
-    */
-
-
-    var vertexShader = `
-    attribute vec3 a_coordinate;
-    attribute vec2 a_bone;
-    attribute float a_boneWeight;
-    attribute vec3 a_normal;
-    attribute vec2 a_texcoord;
-    attribute vec3 a_bary;
-    uniform mat4 u_matrix; //The Matrix!
-    uniform vec4 u_bones[113 * 2]; //Bones that can be moved
-    varying vec2 v_textureCoord;
-    varying vec3 v_normal;
-    varying vec3 v_bary;
-    
-    void main(void){
-    
-      vec4 blendDQ[2];
-
-      blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
-      blendDQ[1] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 1)];
-      
-      //if((a_boneWeight != 0.5)){
-        blendDQ[0] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 0)];
-        blendDQ[1] += (1.0 - a_boneWeight)*u_bones[(2*int(a_bone.y) + 1)];
-      //}
-      
-      float len = length(blendDQ[0]);
-	    blendDQ[0] /= len;
-      blendDQ[1] /= len;
-      
-	    vec3 position = a_coordinate + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_coordinate) + blendDQ[0].x*a_coordinate);
-	    vec3 trans = 2.0*(blendDQ[0].x*blendDQ[1].yzw - blendDQ[1].x*blendDQ[0].yzw + cross(blendDQ[0].yzw, blendDQ[1].yzw));
-	    position += trans;
-
-	    vec3 normal = a_normal + 2.0*cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x*a_normal);
-    
-      //Matrix multiplication order!
-      gl_Position = u_matrix * vec4(position, 1.0);
-      v_normal = normal;
-      
-      v_textureCoord = a_texcoord;
-      v_bary = a_bary;
-    }`;
-
-    //Anime has exactly 2 different shadings, light OR dark
-    var fragmentShader = `
-    #extension GL_OES_standard_derivatives : enable
-    precision mediump float;
-    varying vec2 v_textureCoord;
-    varying vec3 v_normal;
-    varying vec3 v_bary;
-    uniform vec3 u_light;
-    uniform sampler2D u_texture;
-
-    void main() {
-    if(any(lessThan(v_bary, vec3(0.001)))){
-        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-      }else{
-      //step?
-        float light = dot(v_normal, normalize(u_light));
-        if(light <= 1.0/16.0 * 7.0){
-          light = 0.5;
-        }else{
-          light = 0.3;
-        }
-        
-        vec3 src = vec3(texture2D(u_texture, v_textureCoord));
-        
-        gl_FragColor = vec4(src * 2.0 * light,1);
-        //if(light > 0.5){
-        //gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
-        
-      }
-    }`;
-
+    celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader); // jshint ignore:line
     // Put the vertex shader and fragment shader together into
     // a complete program
-    var shaderProgram = new ShaderProg(vertexShader, fragmentShader);
+    var shaderProgram = new ShaderProg(vertexShader, fragmentShader); // jshint ignore:line
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw("cat", shaderProgram, model[i], {
-        locations: [model[i][0]],
+      addObjectToDraw("cat", shaderProgram, model[i].model, {
+        locations: [model[i].name],
         uniforms: ["u_texture"]
       }, 1);
     }
     //Get rid of model, make it easier for the garbage collector
-    //model = null;
+    model = null;
 
     // Everything we need has now been copied to the graphics
     // hardware, so we can start drawing
@@ -300,6 +124,8 @@ function start() {
     // Clear the drawing surface
     gl.clearColor(1.0, 1.0, 1.0, 1.0);
     gl.enable(gl.DEPTH_TEST);
+    gl.enable(gl.CULL_FACE);
+    gl.disable(gl.BLEND);
 
     window.requestAnimationFrame(redraw);
   }
@@ -334,25 +160,6 @@ function redraw() {
   }
   //
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.disable(gl.BLEND);
-
-  gl.cullFace(gl.FRONT);
-  gl.enable(gl.CULL_FACE);
-
-  //Check what is faster: moving this into the other loop or leaving it this way
-  //What shader program
-  gl.useProgram(celLineShader.prog);
-  //Uniforms such as the matrix
-  gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
-  gl.uniform4fv(celLineShader.uniforms["u_bones[0]"], boneMat);
-  gl.uniform1f(celLineShader.uniforms["u_width"], 0.005);
-  objectsToDraw.forEach((object) => {
-    //Bind VAO
-    vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the outlines
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);
-  });
 
   gl.cullFace(gl.BACK);
   var prevShaderProg = objectsToDraw[0].shaderProgram;
@@ -383,13 +190,30 @@ function redraw() {
   });
 
 
-  gl.disable(gl.CULL_FACE);
+  gl.cullFace(gl.FRONT);
+  //Check what is faster: moving this into the other loop or leaving it this way
+  //What shader program
+  gl.useProgram(celLineShader.prog);
+  //Uniforms such as the matrix
+  gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
+  gl.uniform4fv(celLineShader.uniforms["u_bones[0]"], boneMat);
+  gl.uniform1f(celLineShader.uniforms["u_width"], 0.005);
+  objectsToDraw.forEach((object) => {
+    //Bind VAO
+    vaoExt.bindVertexArrayOES(object.vao);
+    //Draw the outlines
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    //vaoExt.bindVertexArrayOES(null);
+  });
+
+  //lightRot[0] = pitch;
+
   //Draw transparent objects
 
   window.requestAnimationFrame(redraw);
 }
 
-var animationName = "nod"; //TODO a changeanimation function
+var animationName = "bindpose"; //TODO a changeanimation function
 
 /**
  * Applies a step of an animation. Returns true, if it reached the end
@@ -401,7 +225,7 @@ function animationStep(animationName) {
     a.prevKeyframe = [];
     for (var i = 0; i < a.usedBones.length; i++) {
       var boneIndex = a.usedBones[i];
-      a.prevKeyframe[i] = bones[boneIndex].qRot;
+      a.prevKeyframe[i] = bones[boneIndex].dq.real;
     }
 
   }
@@ -422,8 +246,8 @@ function animationStep(animationName) {
   //For each bone in the animation
   for (var i = 0; i < a.usedBones.length; i++) {
     var boneIndex = a.usedBones[i];
-    bones[boneIndex].qRot = Quat.nlerp1(
-      keyframe1[i], keyframe2[i], interpolationFactor);
+    bones[boneIndex].dq.setRotation(Quat.nlerp1(
+      keyframe1[i], keyframe2[i], interpolationFactor));
   }
 
   a.frame += 0.05;
@@ -436,7 +260,7 @@ function animationStep(animationName) {
 
 function calculateBones() {
   var boneMat = [];
-  //animationStep(animationName);
+  animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions

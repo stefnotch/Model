@@ -421,14 +421,6 @@ DualQuat.prototype.multiply = function(dq) {
         Quat.multiply(dq.real, this.dual));
     return this;
 };
-DualQuat.prototype.toFAKEMat4 = function() {
-    return [
-        this.real[0],this.real[1],this.real[2],this.real[3],
-        this.dual[0],this.dual[1],this.dual[2],this.dual[3],
-        0,0,1,0,
-        0,0,0, 1
-    ];
-}
 
 DualQuat.prototype.toArray = function() {
     return [
@@ -515,11 +507,31 @@ DualQuat.prototype.setRotationUnoptimized = function(q) {
     return this;
 };
 
-/*
-    public DualQuaternion setRotation(Quaternion q) {
 
-        Vector3d position = getPosition();
-        makeRotationFromQuaternion(q);
-        return setPosition(position);
+DualQuat.prototype.setRotation = function(q) {
+    var t = Quat.multiply(this.dual,
+        Quat.conjugate(this.real)
+    );
+    this.real = [q[0], q[1], q[2], q[3]];
+    this.dual = Quat.multiply(t, this.real);
+    
+    return this;
+    /*
+    -dw*rx+dx*rw-dy*rz+dz*ry (POSX)
+    -dw*ry+dx*rz+dy*rw-dz*rx (POSY)
+    -dw*rz-dx*ry+dy*rx+dz*rw (POSZ)
 
-}*/
+    -POSX*rx-POSY*ry-POSZ*rz
+    
+    */
+};
+
+DualQuat.prototype.blend = function(t, q1, q2){
+    
+    /*
+    DLB(t, q1, q2) = (1-t)*q1+t*q2 
+                      -------------
+                     ||(1-t)*q1+t*q2|| -> Quat.length(real)
+    
+    */
+};
