@@ -82,7 +82,7 @@ function pickPixel(objectsToDraw, viewMatrix, boneMat) {
         //Bind VAO
         vaoExt.bindVertexArrayOES(object.vao);
         //Draw the outlines
-        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
     });
 
     //Read the pixel
@@ -93,9 +93,9 @@ function pickPixel(objectsToDraw, viewMatrix, boneMat) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 }
 
-var normalsTex, normalsFramebuffer, normalsShaderProg;
+var normalsTex, normalsFramebuffer, normalsShader;
 
-function setUpNormalsRenderer(){
+function setUpNormalsRenderer() {
     // Create the texture
     normalsTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, normalsTex);
@@ -120,16 +120,37 @@ function setUpNormalsRenderer(){
         alert("this combination of attachments does not work");
         return;
     }
-    
-    normalsShaderProg = new ShaderProg(normalsVShader, normalsFShader);
-    
+
+    normalsShader = new ShaderProg(normalsVShader, normalsFShader);
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 }
 
+function renderNormals(objectsToDraw, viewMatrix, boneMat) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, normalsFramebuffer);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.cullFace(gl.BACK);
+    gl.useProgram(normalsShader.prog);
+    //Uniforms
+    gl.uniform4fv(normalsShader.uniforms["u_bones[0]"], boneMat);
+    gl.uniformMatrix4fv(normalsShader.uniforms["u_matrix"], false, viewMatrix);
+
+    objectsToDraw.forEach((object) => {
+        //Bind VAO
+        vaoExt.bindVertexArrayOES(object.vao);
+        //Draw
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
+    });
+    //Unbind VAO
+    vaoExt.bindVertexArrayOES(null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
+}
 
 /*global createShader shaderProgctor vaoExt*/
 var shadowFramebuffer, shadowShaderProgram, shadowLightUniform, shadowBoneUniform;
 var depthTexture;
+
 function setUpShadowMap() {
     /*
    glGenTextures(1, &depth_tex);
@@ -194,7 +215,7 @@ function setUpShadowMap() {
     //gl.texParameteri(gl.TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
     //gl.texParameteri(gl.TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     //Feel free to make the texture a power of 2
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 2048*4,2048*4, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 2048 * 4, 2048 * 4, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
 
     shadowFramebuffer = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFramebuffer);
@@ -242,7 +263,7 @@ function renderShadows(lightMat, objectsToDraw, boneMat) {
         //Bind VAO
         vaoExt.bindVertexArrayOES(object.vao);
         //Draw the outlines
-        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
     });
     //Unbind VAO
     vaoExt.bindVertexArrayOES(null);

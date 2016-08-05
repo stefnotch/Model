@@ -3,7 +3,8 @@ git commit -am "your message goes here"
 git push
 */
 /*global model bones setUpPicker pickPixel initSidebar animations*/
-/*global Mat4 Quat DualQuat*/
+/*global Mat4 Quat DualQuat*/ //Math
+/*global setUpNormalsRenderer renderNormals normalsTex*/ //Framebuffers
 //cgc -entry dqsFast -profile glslv -profileopts version=120 C:\Users\stefan\Downloads\Skinning\test.cg
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
@@ -61,8 +62,6 @@ var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
 
-var drawDragon = true;
-
 var celLineShader;
 
 var mouse = {
@@ -112,8 +111,8 @@ function start() {
     for (var i = 0; i < model.length; i++) {
       addObjectToDraw("cat", shaderProgram, model[i].model, {
         locations: [model[i].name],
-        uniforms: ["u_texture"]
-      }, 1);
+        uniforms: ["u_texture", "u_normalsTex"]
+      });
     }
     //Get rid of model, make it easier for the garbage collector
     model = null;
@@ -158,6 +157,9 @@ function redraw() {
       ), boneMat);*/
     mouse.clicked = false;
   }
+
+  renderNormals(objectsToDraw, matrix, boneMat);
+
   //
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -176,20 +178,25 @@ function redraw() {
       gl.uniform1i(object.textureUniforms[i], i);
       gl.bindTexture(gl.TEXTURE_2D, object.textures[i]);
     }
+    gl.activeTexture(gl.TEXTURE0 + i);
+    gl.uniform1i(object.textureUniforms[i], i);
+    gl.bindTexture(gl.TEXTURE_2D, normalsTex);
 
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_matrix"], false, matrix);
     gl.uniform4fv(object.shaderProgram.uniforms["u_bones[0]"], boneMat);
     gl.uniform3fv(object.shaderProgram.uniforms["u_light"], lightRot);
+    gl.uniform2f(object.shaderProgram.uniforms["u_onePixel"], gl.drawingBufferWidth, gl.drawingBufferHeight);
+    
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
 
     //Draw the object
-    if (drawDragon)
-      gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
   });
 
 
+  //OUTLINE
   gl.cullFace(gl.FRONT);
   //Check what is faster: moving this into the other loop or leaving it this way
   //What shader program
@@ -202,8 +209,7 @@ function redraw() {
     //Bind VAO
     vaoExt.bindVertexArrayOES(object.vao);
     //Draw the outlines
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength / 3);
-    //vaoExt.bindVertexArrayOES(null);
+    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
   });
 
   //lightRot[0] = pitch;
@@ -342,7 +348,7 @@ for (var i = 0; i < na; ++i) {
   var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
   for (var i = 0; i < nu; ++i) {
     var uniformName = gl.getActiveUniform(shaderProgram, i).name;
-    if (uniformName.indexOf("texture") == -1) {
+    if (uniformName.toLowerCase().indexOf("tex") == -1) {
       this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
     }
   }
@@ -379,7 +385,7 @@ function setAttributes(attributes, shaderProgram, offset) {
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
+function createObjectToDraw(name, shaderProgram, object, textures) {
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -393,16 +399,15 @@ function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
     ["a_coordinate", 3, false],
     ["a_texcoord", 2, true],
     ["a_normal", 3, true],
-    ["a_bary", 3, false],
     ["a_bone", 2, false],
     ["a_boneWeight", 1, true]
-  ], shaderProgram.prog, 4);
+  ], shaderProgram.prog);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
   var textureUniforms = [];
   for (var i = 0; i < textures.uniforms.length; i++) {
     //Shader program texture index
-    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]), i);
+    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]));
   }
 
   vaoExt.bindVertexArrayOES(null);
@@ -410,15 +415,15 @@ function createObjectToDraw(name, shaderProgram, object, textures, boneType) {
   return {
     shaderProgram: shaderProgram,
     vao: vao,
-    bufferLength: (3 * object.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
+    bufferLength: (object.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
     textures: loadTextures(textures.locations, "Model/" + name),
     textureUniforms: textureUniforms
   };
 }
 
-function addObjectToDraw(name, shaderProgram, object, textures, boneType) {
+function addObjectToDraw(name, shaderProgram, object, textures) {
   objectsToDraw.push(
-    createObjectToDraw(name, shaderProgram, object, textures, boneType));
+    createObjectToDraw(name, shaderProgram, object, textures));
 }
 
 /**
@@ -663,7 +668,7 @@ function keyboardHandlerUp(keyboardEvent) {
         velocity[2] = 0.00;
         break;*/
     case "KeyH":
-      drawDragon = !drawDragon;
+      //drawDragon = !drawDragon;
   }
 }
 
