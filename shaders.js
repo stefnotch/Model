@@ -89,13 +89,13 @@ void main() {
 
  vec4 nd;
 
- nd.x = dot(nc, tex2D(u_normalsTex, I.tc1));
+ nd.x = dot(nc, texture2D(u_normalsTex, I.tc1).xyz);
 
- nd.y = dot(nc, tex2D(u_normalsTex, I.tc2));
+ nd.y = dot(nc, texture2D(u_normalsTex, I.tc2).xyz);
 
- nd.z = dot(nc, tex2D(u_normalsTex, I.tc3));
+ nd.z = dot(nc, texture2D(u_normalsTex, I.tc3).xyz);
 
- nd.w = dot(nc, tex2D(u_normalsTex, I.tc4));
+ nd.w = dot(nc, texture2D(u_normalsTex, I.tc4).xyz);
 
  nd -= e_barrier.x;
 
@@ -131,17 +131,25 @@ void main() {
 
     vec2 oP = vec2(1.0)/u_onePixel;
     vec2 pos = gl_FragCoord.xy/u_onePixel;
-    vec3 a = clamp(v_normal - texture2D(u_normalsTex, pos + oP * vec2(1.0, 1.0)).xyz +
-    v_normal - texture2D(u_normalsTex, pos + oP * vec2(1.0, -1.0)).xyz +
-    v_normal - texture2D(u_normalsTex, pos + oP * vec2(-1.0, 1.0)).xyz, 0.0, 1.0);
-    float sum = step(0.1,1.0-(a.x + a.y + a.z)); //Seems to look fairly decent
-
+    vec3 a = clamp((v_normal - texture2D(u_normalsTex, pos + oP * vec2(1.0, 1.0)).xyz * 2.0 + 1.0) +
+    (v_normal - texture2D(u_normalsTex, pos + oP * vec2(1.0, -1.0)).xyz * 2.0 + 1.0)+
+    (v_normal - texture2D(u_normalsTex, pos + oP * vec2(-1.0, 1.0)).xyz * 2.0 + 1.0), 0.0, 1.0);
+    float sum = 1.0 - max(a.x + a.y + a.z, 0.1); //Seems to look fairly decent
+    /*
+    vec3 nd;
+    nd.x = (dot(v_normal, texture2D(u_normalsTex, pos + oP * vec2(1.0, 1.0)).xyz * 2.0 - 1.0));
+    nd.y = (dot(v_normal, texture2D(u_normalsTex, pos + oP * vec2(1.0, -1.0)).xyz * 2.0 - 1.0));
+    nd.z = (dot(v_normal, texture2D(u_normalsTex, pos + oP * vec2(-1.0, 1.0)).xyz * 2.0 - 1.0));
+    nd -= 0.4;
+    float sum = clamp(nd.x + nd.y + nd.z,0.0,1.0);*/
+    gl_FragColor = vec4(sum,0.0, 0.0, 1.0);
+    
   //step?
     float light = dot(v_normal, normalize(u_light)) <= 1.0/13.0 ? 0.5 : 0.3;
     
     vec3 src = ceil(vec3(texture2D(u_texture, v_textureCoord)) * 10.0) / 10.0; //floor
     
-    gl_FragColor = vec4(src * 2.0 * light * sum,1);
+    //gl_FragColor = vec4(src * 2.0 * light * sum,1);
     //if(light > 0.5){
     //gl_FragColor = vec4((1.0 - 2.0 * (1.0 - light) * (1.0 - src.y)),(1.0 - 2.0 * (1.0 - light) * (1.0 - src.z)),1);
 
@@ -190,5 +198,5 @@ precision mediump float;
 varying vec3 v_normal;
 
 void main() {
-    gl_FragColor = vec4(v_normal, 1.0);
+    gl_FragColor = vec4(v_normal * 0.5 + 0.5, 1.0);
 }`;
