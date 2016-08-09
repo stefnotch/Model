@@ -1,5 +1,5 @@
 //Handles the gpu picking
-/*global gl vaoExt ShaderProg Mat4 normalsVShader normalsFShader*/
+/*global gl vaoExt ShaderProg Mat4 lightRot*/
 
 //You need a renderbuffer for the depth texture/test
 //glReadPixels 
@@ -18,8 +18,8 @@ function setUpPicker() {
     // Create the texture
     pickerTexture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, pickerTexture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     //Really small texture
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
@@ -61,7 +61,6 @@ function setUpPicker() {
     }`;
 
     pickerShader = new ShaderProg(shadowVertShader, shadowFragShader);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 
 }
 
@@ -86,55 +85,57 @@ function pickPixel(objectsToDraw, viewMatrix, boneMat) {
     });
 
     //Read the pixel
-    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pickerPixel);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pickerPixel); //gl.RGBA or gl.RGB
     //pickerPixel now contains the relevant pixel
     //Unbind VAO
     vaoExt.bindVertexArrayOES(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 }
 
-var normalsTex, normalsFramebuffer, normalsShader;
-
-function setUpNormalsRenderer() {
+function setUpRenderer(vShader, fShader, renderFunction, sizeX, sizeY) {
+    if(sizeX == undefined){
+        sizeX = gl.drawingBufferWidth;
+    }
+    if(sizeY == undefined){
+        sizeY = gl.drawingBufferHeight;
+    }
     // Create the texture
-    normalsTex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, normalsTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    this.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); //gl.NEAREST works as well
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.drawingBufferWidth, gl.drawingBufferHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
     //Framebuffer
-    normalsFramebuffer = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, normalsFramebuffer);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, normalsTex, 0);
+    this.framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.tex, 0);
 
-    //Renderbuffer for the depth texture/test
-    var renderbuffer = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+    //Renderbuffer for the depth test
+    this.renderbuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderbuffer);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.renderbuffer);
 
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
         alert("this combination of attachments does not work");
         return;
     }
-
-    normalsShader = new ShaderProg(normalsVShader, normalsFShader);
-
+    this.shader = new ShaderProg(vShader, fShader);
+    this.render = renderFunction;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 }
 
-function renderNormals(objectsToDraw, viewMatrix, boneMat) {
-    gl.bindFramebuffer(gl.FRAMEBUFFER, normalsFramebuffer);
+function renderNormals(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.cullFace(gl.BACK);
-    gl.useProgram(normalsShader.prog);
+    gl.useProgram(this.shader.prog);
     //Uniforms
-    gl.uniform4fv(normalsShader.uniforms["u_bones[0]"], boneMat);
-    gl.uniformMatrix4fv(normalsShader.uniforms["u_matrix"], false, viewMatrix);
+    gl.uniform4fv(this.shader.uniforms["u_bones[0]"], boneMat);
+    gl.uniformMatrix4fv(this.shader.uniforms["u_matrix"], false, viewMatrix);
 
     objectsToDraw.forEach((object) => {
         //Bind VAO
@@ -142,9 +143,56 @@ function renderNormals(objectsToDraw, viewMatrix, boneMat) {
         //Draw
         gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
     });
-    //Unbind VAO
-    vaoExt.bindVertexArrayOES(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
+}
+
+function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    //gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.cullFace(gl.BACK);
+    var prevShaderProg = objectsToDraw[0].shaderProgram;
+    gl.useProgram(prevShaderProg.prog);
+
+    objectsToDraw.forEach((object) => {
+        //What shader program
+        if (prevShaderProg != object.shaderProgram) {
+            gl.useProgram(object.shaderProgram.prog);
+            prevShaderProg = object.shaderProgram;
+        }
+        for (var i = 0; i < object.textures.length; i++) {
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.uniform1i(object.textureUniforms[i], i);
+            gl.bindTexture(gl.TEXTURE_2D, object.textures[i]);
+        }
+
+        //Uniforms such as the matrix
+        gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_matrix"], false, viewMatrix);
+        gl.uniform4fv(object.shaderProgram.uniforms["u_bones[0]"], boneMat);
+      
+        //Bind VAO
+        vaoExt.bindVertexArrayOES(object.vao);
+
+        //Draw the object
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
+    });
+
+
+    //OUTLINE
+    gl.cullFace(gl.FRONT);
+    //Check what is faster: moving this into the other loop or leaving it this way
+    //What shader program
+    gl.useProgram(this.shader.prog);
+    //Uniforms such as the matrix
+    gl.uniformMatrix4fv(this.shader.uniforms["u_matrix"], false, viewMatrix);
+    gl.uniform4fv(this.shader.uniforms["u_bones[0]"], boneMat);
+    gl.uniform1f(this.shader.uniforms["u_width"], 0.005);
+    objectsToDraw.forEach((object) => {
+        //Bind VAO
+        vaoExt.bindVertexArrayOES(object.vao);
+        //Draw the outlines
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
+    });
 }
 
 /*global createShader shaderProgctor vaoExt*/
@@ -242,7 +290,6 @@ function setUpShadowMap() {
     shadowShaderProgram = new shaderProgctor(shadowVertShader, shadowFragShader);
     shadowLightUniform = gl.getUniformLocation(shadowShaderProgram, "u_light");
     shadowBoneUniform = gl.getUniformLocation(shadowShaderProgram, "u_bones");
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 
 }
 
@@ -267,5 +314,4 @@ function renderShadows(lightMat, objectsToDraw, boneMat) {
     });
     //Unbind VAO
     vaoExt.bindVertexArrayOES(null);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
 }

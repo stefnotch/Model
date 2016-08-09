@@ -2,9 +2,9 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model bones setUpPicker pickPixel initSidebar animations*/
+/*global model bones setUpPicker pickPixel initSidebar animations setUpRenderer*/
 /*global Mat4 Quat DualQuat*/ //Math
-/*global setUpNormalsRenderer renderNormals normalsTex*/ //Framebuffers
+/*global normalsVShader normalsFShader*/
 //cgc -entry dqsFast -profile glslv -profileopts version=120 C:\Users\stefan\Downloads\Skinning\test.cg
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
@@ -46,6 +46,7 @@ No more VAO extension, it is built in!
 Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
 3D textures (For water and such!)
 Transform feedback
+Floating point textures
 */
 var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
@@ -62,14 +63,16 @@ var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
 
-var celLineShader;
-
+var normalsRenderer;
+var mainRenderer;
 var mouse = {
   clicked: false,
   X: 0,
   Y: 0
 };
 var rigging = false;
+
+var postProcess;
 
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
@@ -94,24 +97,34 @@ function start() {
   if (gl) {
     setUpBones();
     //setUpPicker();
-    setUpNormalsRenderer();
+    normalsRenderer = new setUpRenderer(normalsVShader, normalsFShader, renderNormals);
+    mainRenderer = new setUpRenderer(celLineVertexShader, `
+    precision mediump float;
+    void main() {
+      gl_FragColor = vec4(1,1,1, 0.0);  // White
+    }`, renderMain);
+
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
+    postProcess = createObjectToDraw("postprocess", new ShaderProg(ppVShader, ppFShader), [-1, -1,
+      1, -1, -1, 1,
+      1, 1
+    ], [
+      ["a_coordinate", 2, false]
+    ], {
+      locations: undefined,
+      uniforms: ["u_texture", "u_normalsTex"]
+    });
 
-    var celLineFragmentShader = `
-    precision mediump float;
-    void main() {
-      gl_FragColor = vec4(0,0,0, 1);  // black
-    }`;
-    celLineShader = new ShaderProg(celLineVertexShader, celLineFragmentShader); // jshint ignore:line
+
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = new ShaderProg(vertexShader, fragmentShader); // jshint ignore:line
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw("cat", shaderProgram, model[i].model, {
+      addObjectToDraw("cat", shaderProgram, model[i].model, undefined, {
         locations: [model[i].name],
-        uniforms: ["u_texture", "u_normalsTex"]
+        uniforms: ["u_texture"]
       });
     }
     //Get rid of model, make it easier for the garbage collector
@@ -129,6 +142,7 @@ function start() {
     window.requestAnimationFrame(redraw);
   }
 }
+
 
 /**
  * Draw loop
@@ -158,59 +172,30 @@ function redraw() {
     mouse.clicked = false;
   }
 
-  renderNormals(objectsToDraw, matrix, boneMat);
+  normalsRenderer.render(objectsToDraw, matrix, boneMat);
+  mainRenderer.render(objectsToDraw, matrix, boneMat);
 
-  //
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.cullFace(gl.BACK); //Not needed?
+  gl.useProgram(postProcess.shaderProgram.prog);
 
-  gl.cullFace(gl.BACK);
-  var prevShaderProg = objectsToDraw[0].shaderProgram;
-  gl.useProgram(prevShaderProg.prog);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.uniform1i(postProcess.textureUniforms[0], 0);
+  gl.bindTexture(gl.TEXTURE_2D, mainRenderer.tex);
 
-  objectsToDraw.forEach((object) => {
-    //What shader program
-    if (prevShaderProg != object.shaderProgram) {
-      gl.useProgram(object.shaderProgram.prog);
-      prevShaderProg = object.shaderProgram;
-    }
-    for (var i = 0; i < object.textures.length; i++) {
-      gl.activeTexture(gl.TEXTURE0 + i);
-      gl.uniform1i(object.textureUniforms[i], i);
-      gl.bindTexture(gl.TEXTURE_2D, object.textures[i]);
-    }
-    gl.activeTexture(gl.TEXTURE0 + i);
-    gl.uniform1i(object.textureUniforms[i], i);
-    gl.bindTexture(gl.TEXTURE_2D, normalsTex);
+  gl.activeTexture(gl.TEXTURE0 + 1);
+  gl.uniform1i(postProcess.textureUniforms[1], 1);
+  gl.bindTexture(gl.TEXTURE_2D, normalsRenderer.tex);
 
-    //Uniforms such as the matrix
-    gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_matrix"], false, matrix);
-    gl.uniform4fv(object.shaderProgram.uniforms["u_bones[0]"], boneMat);
-    gl.uniform3fv(object.shaderProgram.uniforms["u_light"], lightRot);
-    gl.uniform2f(object.shaderProgram.uniforms["u_onePixel"], gl.drawingBufferWidth, gl.drawingBufferHeight);
-    
-    //Bind VAO
-    vaoExt.bindVertexArrayOES(object.vao);
+  gl.uniform2f(postProcess.shaderProgram.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.uniform3fv(postProcess.shaderProgram.uniforms["u_light"], lightRot);
+          
+  vaoExt.bindVertexArrayOES(postProcess.vao);
 
-    //Draw the object
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
-  });
-
-
-  //OUTLINE
-  gl.cullFace(gl.FRONT);
-  //Check what is faster: moving this into the other loop or leaving it this way
-  //What shader program
-  gl.useProgram(celLineShader.prog);
-  //Uniforms such as the matrix
-  gl.uniformMatrix4fv(celLineShader.uniforms["u_matrix"], false, matrix);
-  gl.uniform4fv(celLineShader.uniforms["u_bones[0]"], boneMat);
-  gl.uniform1f(celLineShader.uniforms["u_width"], 0.005);
-  objectsToDraw.forEach((object) => {
-    //Bind VAO
-    vaoExt.bindVertexArrayOES(object.vao);
-    //Draw the outlines
-    gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
-  });
+  //Draw the object
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, postProcess.bufferLength);
+  //
 
   //lightRot[0] = pitch;
 
@@ -385,7 +370,16 @@ function setAttributes(attributes, shaderProgram, offset) {
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(name, shaderProgram, object, textures) {
+function createObjectToDraw(name, shaderProgram, object, attributes, textures) {
+  if (attributes == undefined) {
+    attributes = [
+      ["a_coordinate", 3, false],
+      ["a_texcoord", 2, true],
+      ["a_normal", 3, true],
+      ["a_bone", 2, false],
+      ["a_boneWeight", 1, true]
+    ];
+  }
   //Create VAO
   var vao = vaoExt.createVertexArrayOES();
   // Start setting up VAO
@@ -395,13 +389,7 @@ function createObjectToDraw(name, shaderProgram, object, textures) {
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
   //CO, UV, NORMALS
-  var numberOfAttributes = setAttributes([
-    ["a_coordinate", 3, false],
-    ["a_texcoord", 2, true],
-    ["a_normal", 3, true],
-    ["a_bone", 2, false],
-    ["a_boneWeight", 1, true]
-  ], shaderProgram.prog);
+  var numberOfAttributes = setAttributes(attributes, shaderProgram.prog);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
 
   var textureUniforms = [];
@@ -421,16 +409,18 @@ function createObjectToDraw(name, shaderProgram, object, textures) {
   };
 }
 
-function addObjectToDraw(name, shaderProgram, object, textures) {
+function addObjectToDraw(name, shaderProgram, object, attributes, textures) {
   objectsToDraw.push(
-    createObjectToDraw(name, shaderProgram, object, textures));
+    createObjectToDraw(name, shaderProgram, object, attributes, textures));
 }
 
 /**
  * Loads a texture from a URL
  */
 function loadTextures(textureLocations, prefix) {
-
+  if (textureLocations == undefined) {
+    return null;
+  }
   var returnTextures = [];
   for (var i = 0; i < textureLocations.length; i++) {
     // Create a texture.
@@ -541,7 +531,11 @@ function initWebGL(canvas) {
   if (window.WebGLRenderingContext) {
     try {
       // Try to grab the new context. If it fails, fallback to webgl.
-      gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      gl = canvas.getContext("webgl", {
+        antialias: false
+      }) || canvas.getContext("experimental-webgl", {
+        antialias: false
+      });
     } catch (e) {
       alert(e);
     }
