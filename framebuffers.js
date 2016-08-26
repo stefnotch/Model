@@ -1,5 +1,5 @@
 //Handles the gpu picking
-/*global gl vaoExt ShaderProg Mat4 lightRot*/
+/*global gl vaoExt ShaderProg Mat4 lightRot outlines*/
 
 //You need a renderbuffer for the depth texture/test
 //glReadPixels 
@@ -92,10 +92,10 @@ function pickPixel(objectsToDraw, viewMatrix, boneMat) {
 }
 
 function setUpRenderer(vShader, fShader, renderFunction, sizeX, sizeY) {
-    if(sizeX == undefined){
+    if (sizeX == undefined) {
         sizeX = gl.drawingBufferWidth;
     }
-    if(sizeY == undefined){
+    if (sizeY == undefined) {
         sizeY = gl.drawingBufferHeight;
     }
     // Create the texture
@@ -151,25 +151,26 @@ function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     gl.cullFace(gl.BACK);
-    var prevShaderProg = objectsToDraw[0].shaderProgram;
+    var prevShaderProg = objectsToDraw[0].shader;
     gl.useProgram(prevShaderProg.prog);
 
     objectsToDraw.forEach((object) => {
         //What shader program
-        if (prevShaderProg != object.shaderProgram) {
-            gl.useProgram(object.shaderProgram.prog);
-            prevShaderProg = object.shaderProgram;
-        }
-        for (var i = 0; i < object.textures.length; i++) {
-            gl.activeTexture(gl.TEXTURE0 + i);
-            gl.uniform1i(object.textureUniforms[i], i);
-            gl.bindTexture(gl.TEXTURE_2D, object.textures[i]);
+        if (prevShaderProg != object.shader) {
+            gl.useProgram(object.shader.prog);
+            prevShaderProg = object.shader;
         }
 
+        Object.keys(object.shader.texUniforms).forEach(function(key, index) {
+            gl.activeTexture(gl.TEXTURE0 + index);
+            gl.uniform1i(object.shader.texUniforms[key], index);
+            gl.bindTexture(gl.TEXTURE_2D, object.textures[index]);
+        });
+
         //Uniforms such as the matrix
-        gl.uniformMatrix4fv(object.shaderProgram.uniforms["u_matrix"], false, viewMatrix);
-        gl.uniform4fv(object.shaderProgram.uniforms["u_bones[0]"], boneMat);
-      
+        gl.uniformMatrix4fv(object.shader.uniforms["u_matrix"], false, viewMatrix);
+        gl.uniform4fv(object.shader.uniforms["u_bones[0]"], boneMat);
+
         //Bind VAO
         vaoExt.bindVertexArrayOES(object.vao);
 
@@ -180,19 +181,50 @@ function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
 
     //OUTLINE
     gl.cullFace(gl.FRONT);
+    gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    //gl.blendEquation(gl.FUNC_SUBTRACT);
+    gl.enable(gl.BLEND);
     //Check what is faster: moving this into the other loop or leaving it this way
     //What shader program
     gl.useProgram(this.shader.prog);
     //Uniforms such as the matrix
     gl.uniformMatrix4fv(this.shader.uniforms["u_matrix"], false, viewMatrix);
     gl.uniform4fv(this.shader.uniforms["u_bones[0]"], boneMat);
-    gl.uniform1f(this.shader.uniforms["u_width"], 0.005);
+    gl.uniform2f(this.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
     objectsToDraw.forEach((object) => {
         //Bind VAO
         vaoExt.bindVertexArrayOES(object.vao);
         //Draw the outlines
         gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
     });
+    gl.disable(gl.BLEND);
+}
+
+function renderPP(ppObject, mainTex, normalsTex) {
+    if (!outlines) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    } else {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    }
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.cullFace(gl.BACK); //Not needed?
+    gl.useProgram(this.shader.prog);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(this.shader.texUniforms["u_texture"], 0);
+    gl.bindTexture(gl.TEXTURE_2D, mainTex);
+
+    gl.activeTexture(gl.TEXTURE0 + 1);
+    gl.uniform1i(this.shader.texUniforms["u_normalsTex"], 1);
+    gl.bindTexture(gl.TEXTURE_2D, normalsTex);
+
+    gl.uniform2f(this.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.uniform3fv(this.shader.uniforms["u_light"], lightRot);
+
+    vaoExt.bindVertexArrayOES(ppObject.vao);
+
+    //Draw the object
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, ppObject.bufferLength);
 }
 
 /*global createShader shaderProgctor vaoExt*/

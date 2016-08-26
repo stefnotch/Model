@@ -2,9 +2,12 @@
 git commit -am "your message goes here"
 git push
 */
-/*global model bones setUpPicker pickPixel initSidebar animations setUpRenderer*/
+
+/*global model bones setUpPicker pickPixel animations setUpRenderer*/
 /*global Mat4 Quat DualQuat*/ //Math
 /*global normalsVShader normalsFShader*/
+/*global initSidebar rigging outlines*/
+
 //cgc -entry dqsFast -profile glslv -profileopts version=120 C:\Users\stefan\Downloads\Skinning\test.cg
 //https://www.opengl.org/wiki/Performance
 //http://webglfundamentals.org/webgl/lessons/webgl-2-textures.html
@@ -70,10 +73,10 @@ var mouse = {
   X: 0,
   Y: 0
 };
-var rigging = false;
+
 
 var postProcess;
-
+var postProcessObj;
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
 //Called by the body
@@ -101,31 +104,28 @@ function start() {
     mainRenderer = new setUpRenderer(celLineVertexShader, `
     precision mediump float;
     void main() {
-      gl_FragColor = vec4(1,1,1, 0.0);  // White
+      gl_FragColor = vec4(1,1,1, 0.0);  // Alpha
     }`, renderMain);
 
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
-    postProcess = createObjectToDraw("postprocess", new ShaderProg(ppVShader, ppFShader), [-1, -1,
-      1, -1, -1, 1,
-      1, 1
-    ], [
-      ["a_coordinate", 2, false]
-    ], {
-      locations: undefined,
-      uniforms: ["u_texture", "u_normalsTex"]
-    });
+    postProcess = new setUpRenderer(ppVShader, ppFShader, renderPP);
 
+    postProcessObj = createObjectToDraw("postprocess", new ShaderProg(ppAAVShader, ppAAFShader), [-1, -1,
+        1, -1, -1, 1,
+        1, 1
+      ], [
+        ["a_coordinate", 2, false]
+      ],
+      undefined
+    );
 
     // Put the vertex shader and fragment shader together into
     // a complete program
     var shaderProgram = new ShaderProg(vertexShader, fragmentShader); // jshint ignore:line
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw("cat", shaderProgram, model[i].model, undefined, {
-        locations: [model[i].name],
-        uniforms: ["u_texture"]
-      });
+      addObjectToDraw("cat", shaderProgram, model[i].model, undefined, [model[i].name]);
     }
     //Get rid of model, make it easier for the garbage collector
     model = null;
@@ -174,27 +174,27 @@ function redraw() {
 
   normalsRenderer.render(objectsToDraw, matrix, boneMat);
   mainRenderer.render(objectsToDraw, matrix, boneMat);
+    
+  postProcess.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
+  
+  if (outlines) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.cullFace(gl.BACK); //Not needed?
+    gl.useProgram(postProcessObj.shader.prog);
 
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.cullFace(gl.BACK); //Not needed?
-  gl.useProgram(postProcess.shaderProgram.prog);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(postProcessObj.shader.texUniforms["u_texture"], 0);
+    gl.bindTexture(gl.TEXTURE_2D, postProcess.tex);
 
-  gl.activeTexture(gl.TEXTURE0);
-  gl.uniform1i(postProcess.textureUniforms[0], 0);
-  gl.bindTexture(gl.TEXTURE_2D, mainRenderer.tex);
+    gl.uniform2f(postProcessObj.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
+    vaoExt.bindVertexArrayOES(postProcessObj.vao);
+    //Draw the object
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, postProcessObj.bufferLength);
+  }
 
-  gl.activeTexture(gl.TEXTURE0 + 1);
-  gl.uniform1i(postProcess.textureUniforms[1], 1);
-  gl.bindTexture(gl.TEXTURE_2D, normalsRenderer.tex);
 
-  gl.uniform2f(postProcess.shaderProgram.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
-  gl.uniform3fv(postProcess.shaderProgram.uniforms["u_light"], lightRot);
-          
-  vaoExt.bindVertexArrayOES(postProcess.vao);
-
-  //Draw the object
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, postProcess.bufferLength);
+  
   //
 
   //lightRot[0] = pitch;
@@ -312,33 +312,58 @@ function createShader(shaderCode, shaderType) {
   return shader;
 }
 
-function ShaderProg(vertexShader, fragmentShader) {
+function ShaderProg(vShader, fShader) {
   // Put the vertex shader and fragment shader together into
   // a complete program
   var shaderProgram = gl.createProgram();
-  gl.attachShader(shaderProgram, createShader(vertexShader, gl.VERTEX_SHADER));
-  gl.attachShader(shaderProgram, createShader(fragmentShader, gl.FRAGMENT_SHADER));
-  gl.linkProgram(shaderProgram);
-  if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
-    throw new Error(gl.getProgramInfoLog(shaderProgram));
-
-  this.uniforms = {};
-
-  /* var na = gl.getProgramParameter(shaderProgram, gl.ACTIVE_ATTRIBUTES);
-console.log(na, 'attributes');
-for (var i = 0; i < na; ++i) {
-  var a = gl.getActiveAttrib(shaderProgram, i);
-  console.log(i, a.size, a.type, a.name);
-}*/
-  var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
-  for (var i = 0; i < nu; ++i) {
-    var uniformName = gl.getActiveUniform(shaderProgram, i).name;
-    if (uniformName.toLowerCase().indexOf("tex") == -1) {
-      this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+  this.vShaderProg = createShader(vShader, gl.VERTEX_SHADER);
+  this.fShaderProg = createShader(fShader, gl.FRAGMENT_SHADER);
+  gl.attachShader(shaderProgram, this.vShaderProg);
+  gl.attachShader(shaderProgram, this.fShaderProg);
+  this.compile = function() {
+    gl.linkProgram(shaderProgram);
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+      throw new Error(gl.getProgramInfoLog(shaderProgram));
+    var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
+    this.uniforms = {};
+    this.texUniforms = {};
+    for (var i = 0; i < nu; ++i) {
+      var uniformName = gl.getActiveUniform(shaderProgram, i).name;
+      if (uniformName.toLowerCase().indexOf("tex") == -1) {
+        this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+      } else {
+        this.texUniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+      }
     }
-  }
+    this.prog = shaderProgram;
+  };
 
-  this.prog = shaderProgram;
+  this.compile();
+
+  this.vShader = vShader;
+  this.fShader = fShader;
+
+  this.vShaderHeader = "";
+  this.fShaderHeader = "";
+
+  this.setVSource = function(header, newSource) {
+    this.vShaderHeader = header == undefined ? this.vShaderHeader : header;
+    this.vShader = newSource == undefined ? this.vShader : newSource;
+    gl.shaderSource(this.vShaderProg, this.vShaderHeader + this.vShader);
+    gl.compileShader(this.vShaderProg);
+    if (gl.getShaderParameter(this.vShaderProg, gl.COMPILE_STATUS)) {
+      this.compile();
+    }
+  };
+  this.setFSource = function(header, newSource) {
+    this.fShaderHeader = header == undefined ? this.fShaderHeader : header;
+    this.fShader = newSource == undefined ? this.fShader : newSource;
+    gl.shaderSource(this.fShaderProg, this.fShaderHeader + this.fShader);
+    gl.compileShader(this.fShaderProg);
+    if (gl.getShaderParameter(this.fShaderProg, gl.COMPILE_STATUS)) {
+      this.compile();
+    }
+  };
 }
 
 /**
@@ -346,7 +371,7 @@ for (var i = 0; i < na; ++i) {
  * attributes: object with names, number of components and normalize
  * Returns the number of attributes
  */
-function setAttributes(attributes, shaderProgram, offset) {
+function setAttributes(attributes, shader, offset) {
   offset = offset == undefined ? 0 : offset;
   /*attribute, number of elements per vertex, type, normalize, stride (for packed vertices: 3*4),
   offset (must be a multiple of the type)*/
@@ -357,7 +382,7 @@ function setAttributes(attributes, shaderProgram, offset) {
   });
   var prevNumberOfElements = 0;
   attributes.forEach(attribute => {
-    var att = gl.getAttribLocation(shaderProgram, attribute[0]);
+    var att = gl.getAttribLocation(shader, attribute[0]);
     gl.enableVertexAttribArray(att);
     //gl.vertexAttribPointer(index, size, type, normalized, stride, offset);
     gl.vertexAttribPointer(att, attribute[1], gl.FLOAT, attribute[2], numberOfElements * 4, offset + prevNumberOfElements * 4);
@@ -370,7 +395,7 @@ function setAttributes(attributes, shaderProgram, offset) {
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(name, shaderProgram, object, attributes, textures) {
+function createObjectToDraw(name, shader, object, attributes, textures) {
   if (attributes == undefined) {
     attributes = [
       ["a_coordinate", 3, false],
@@ -389,29 +414,22 @@ function createObjectToDraw(name, shaderProgram, object, attributes, textures) {
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 
   //CO, UV, NORMALS
-  var numberOfAttributes = setAttributes(attributes, shaderProgram.prog);
+  var numberOfAttributes = setAttributes(attributes, shader.prog);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
-
-  var textureUniforms = [];
-  for (var i = 0; i < textures.uniforms.length; i++) {
-    //Shader program texture index
-    textureUniforms.push(gl.getUniformLocation(shaderProgram.prog, textures.uniforms[i]));
-  }
 
   vaoExt.bindVertexArrayOES(null);
 
   return {
-    shaderProgram: shaderProgram,
+    shader: shader,
     vao: vao,
     bufferLength: (object.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
-    textures: loadTextures(textures.locations, "Model/" + name),
-    textureUniforms: textureUniforms
+    textures: loadTextures(textures, "Model/" + name),
   };
 }
 
-function addObjectToDraw(name, shaderProgram, object, attributes, textures) {
+function addObjectToDraw(name, shader, object, attributes, textures) {
   objectsToDraw.push(
-    createObjectToDraw(name, shaderProgram, object, attributes, textures));
+    createObjectToDraw(name, shader, object, attributes, textures));
 }
 
 /**
@@ -441,35 +459,20 @@ function loadTextures(textureLocations, prefix) {
       image.src = prefix + "/" + tex[0];
 
       image.addEventListener('load', function() {
-        var mips = false;
         //Bind the texture
         gl.bindTexture(gl.TEXTURE_2D, texture);
         if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-          if (image.width == image.height) {
-            // Scale up the texture to the next highest power of two dimensions.
-            var canvas = document.createElement("canvas");
-            canvas.width = nextHighestPowerOfTwo(image.width);
-            canvas.height = nextHighestPowerOfTwo(image.height);
-            var ctx = canvas.getContext("2d");
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-            image = canvas;
-            mips = true;
-          } else {
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            //No mipmaps
-          }
-        } else {
-          //gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR);
-          mips = true;
+          // Scale up the texture to the next highest power of two dimensions.
+          var canvas = document.createElement("canvas");
+          canvas.width = nextHighestPowerOfTwo(image.width);
+          canvas.height = nextHighestPowerOfTwo(image.height);
+          var ctx = canvas.getContext("2d");
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          image = canvas;
         }
         // Now that the image has loaded make copy it to the texture.
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        if (mips) {
-          //Generate some mipmaps!
-          gl.generateMipmap(gl.TEXTURE_2D);
-        }
+        gl.generateMipmap(gl.TEXTURE_2D);
       });
     }
     returnTextures.push(texture);
@@ -532,9 +535,13 @@ function initWebGL(canvas) {
     try {
       // Try to grab the new context. If it fails, fallback to webgl.
       gl = canvas.getContext("webgl", {
-        antialias: false
+        antialias: false,
+        alpha: false,
+        premultipliedAlpha: false
       }) || canvas.getContext("experimental-webgl", {
-        antialias: false
+        antialias: false,
+        alpha: false,
+        premultipliedAlpha: false
       });
     } catch (e) {
       alert(e);

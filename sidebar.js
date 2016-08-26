@@ -1,4 +1,9 @@
-/*global sidebarStupidFirefox rigging*/
+/*global sidebarStupidFirefox postProcess*/
+var rigging = false;
+var outlines = true;
+var dots = false;
+var shadowOnlyDots = false;
+
 function initSidebar() {
     var options = sidebarStupidFirefox.getElementsByTagName("button");
     for (var i = 0; i < options.length; i++) {
@@ -31,6 +36,29 @@ function optionClick(event) {
             rigging = !rigging;
             this.classList.toggle("enabled");
             break;
+        case "outlines": 
+            outlines = !outlines;
+            this.classList.toggle("enabled");
+            break;
+        case "dots":
+            dots = !dots;
+            this.classList.toggle("enabled");
+            if(dots){
+                postProcess.shader.setFSource("#define DOTS");
+            } else {
+                postProcess.shader.setFSource("");
+            }
+            break;
+        case "dots2":
+            shadowOnlyDots = !shadowOnlyDots;
+            this.classList.toggle("enabled");
+            if(shadowOnlyDots){
+                postProcess.shader.setFSource("#define SHADOW_ONLY_DOTS\n#define DOTS"); //TODO Make this better
+            } else {
+                postProcess.shader.setFSource("");
+            }
+            break;
+
     }
 
 }
