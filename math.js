@@ -353,7 +353,8 @@ var Quat = {
 };
 //http://wscg.zcu.cz/wscg2012/short/A29-full.pdf
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
-
+//real = rot
+//dual = translation
 function DualQuat(real, dual) {
     this.real = real === undefined ? [0, 0, 0, 1] : real;
     this.dual = dual === undefined ? [0, 0, 0, 0] : dual;

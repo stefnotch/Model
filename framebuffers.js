@@ -227,6 +227,25 @@ function renderPP(ppObject, mainTex, normalsTex) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, ppObject.bufferLength);
 }
 
+
+function renderPPThicken(ppObject, ppTex) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.cullFace(gl.BACK); //Not needed?
+    gl.useProgram(this.shader.prog);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(this.shader.texUniforms["u_texture"], 0);
+    gl.bindTexture(gl.TEXTURE_2D, ppTex);
+
+    gl.uniform2f(this.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
+
+    vaoExt.bindVertexArrayOES(ppObject.vao);
+
+    //Draw the object
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, ppObject.bufferLength);
+}
+
 /*global createShader shaderProgctor vaoExt*/
 var shadowFramebuffer, shadowShaderProgram, shadowLightUniform, shadowBoneUniform;
 var depthTexture;

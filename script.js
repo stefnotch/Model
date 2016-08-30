@@ -55,7 +55,7 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-0.07357800747744046, 3, 3],
+var pos = [ -0.12583708965284524, 2.9979705362177205, 1.3783995901996082 ],
   velocity = [0, 0, 0],
   speed = 0.01;
 
@@ -76,6 +76,7 @@ var mouse = {
 
 
 var postProcess;
+var postProcessThicken;
 var postProcessObj;
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
@@ -111,7 +112,7 @@ function start() {
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
     postProcess = new setUpRenderer(ppVShader, ppFShader, renderPP);
-
+    postProcessThicken = new setUpRenderer(ppThickenVShader, ppThickenFShader, renderPPThicken);
     postProcessObj = createObjectToDraw("postprocess", new ShaderProg(ppAAVShader, ppAAFShader), [-1, -1,
         1, -1, -1, 1,
         1, 1
@@ -128,7 +129,7 @@ function start() {
       addObjectToDraw("cat", shaderProgram, model[i].model, undefined, [model[i].name]);
     }
     //Get rid of model, make it easier for the garbage collector
-    model = null;
+    //model = null;
 
     // Everything we need has now been copied to the graphics
     // hardware, so we can start drawing
@@ -174,9 +175,9 @@ function redraw() {
 
   normalsRenderer.render(objectsToDraw, matrix, boneMat);
   mainRenderer.render(objectsToDraw, matrix, boneMat);
-    
+
   postProcess.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
-  
+  postProcessThicken.render(postProcessObj, postProcess.tex);
   if (outlines) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -185,7 +186,7 @@ function redraw() {
 
     gl.activeTexture(gl.TEXTURE0);
     gl.uniform1i(postProcessObj.shader.texUniforms["u_texture"], 0);
-    gl.bindTexture(gl.TEXTURE_2D, postProcess.tex);
+    gl.bindTexture(gl.TEXTURE_2D, postProcessThicken.tex);
 
     gl.uniform2f(postProcessObj.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
     vaoExt.bindVertexArrayOES(postProcessObj.vao);
@@ -194,7 +195,7 @@ function redraw() {
   }
 
 
-  
+
   //
 
   //lightRot[0] = pitch;
@@ -251,7 +252,7 @@ function animationStep(animationName) {
 
 function calculateBones() {
   var boneMat = [];
-  animationStep(animationName);
+  //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions

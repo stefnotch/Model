@@ -58,6 +58,16 @@ function optionClick(event) {
                 postProcess.shader.setFSource("");
             }
             break;
+            
+        case "set light":
+             var yawRad = Mat4.degToRad(yaw);
+            var pitchRad = Mat4.degToRad(pitch);
+            lightRot = [
+                -Math.sin(yawRad) * Math.cos(pitchRad), 
+                Math.sin(pitchRad), 
+                -Math.cos(yawRad) * Math.cos(pitchRad)
+                ];
+            break;
 
     }
 
