@@ -258,12 +258,9 @@ uniform sampler2D u_texture;
 void main(void) {
   vec2 onePixel = vec2(1.0)/u_windowSize;
   vec4 currColor = texture2D(u_texture, v_texcoord);
-  float nearBy = min(
-    min(texture2D(u_texture, v_texcoord + onePixel * vec2( 0, 1)).w,
-      texture2D(u_texture, v_texcoord + onePixel * vec2(-1, 0)).w),
-    min(texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 0)).w,
-      texture2D(u_texture, v_texcoord + onePixel * vec2( 0,-1)).w));
-  gl_FragColor = vec4(currColor.xyz * nearBy * currColor.w, nearBy * currColor.w);
+  float nearBy = min(texture2D(u_texture, v_texcoord + onePixel * vec2( 0, 1)).w, 
+  texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 0)).w);
+  gl_FragColor = vec4(currColor.xyz, nearBy * currColor.w);
 }`;
 
 
@@ -321,14 +318,14 @@ float vector2 = (sum2 - sum3);
 vec2 Normal = vec2( vec1, vector2) * vPixelViewport * fScale;
 
 // Color
-vec4 Scene0 = texture2D( u_texture, v_texcoord);
+vec4 Scene0 = currColor;
 vec4 Scene1 = texture2D( u_texture, v_texcoord + Normal.xy );
 vec4 Scene2 = texture2D( u_texture, v_texcoord - Normal.xy );
 vec4 Scene3 = texture2D( u_texture, v_texcoord + vec2(Normal.x, -Normal.y) * 0.5 );
 vec4 Scene4 = texture2D( u_texture, v_texcoord - vec2(Normal.x, -Normal.y) * 0.5 );
-
+vec4 finally = (Scene0 + Scene1 + Scene2 + Scene3 + Scene4) * 0.2;
 // Final color
-gl_FragColor = (Scene0 + Scene1 + Scene2 + Scene3 + Scene4) * 0.2;
+gl_FragColor = finally * pow(finally.w,1.5);
   
   
 #else
