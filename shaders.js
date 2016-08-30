@@ -263,7 +263,6 @@ void main(void) {
       texture2D(u_texture, v_texcoord + onePixel * vec2(-1, 0)).w),
     min(texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 0)).w,
       texture2D(u_texture, v_texcoord + onePixel * vec2( 0,-1)).w));
-  nearBy = clamp(nearBy, 0.3, 1.0);
   gl_FragColor = vec4(currColor.xyz * nearBy * currColor.w, nearBy * currColor.w);
 }`;
 
@@ -281,43 +280,59 @@ void main(void) {
 `;
 
 var ppAAFShader = `
-#define ANTIALIAS
+#define ANTIALIAS1
 precision mediump float;
 varying vec2 v_texcoord;
 uniform vec2 u_windowSize;
 uniform sampler2D u_texture;
 
 void main(void) {
-  vec2 onePixel = vec2(1.0)/u_windowSize;
+    vec2 onePixel = vec2(1.0)/u_windowSize;
   vec4 currColor = texture2D(u_texture, v_texcoord);
-  
-  //TEST
-  float w = 1.75;
-  float t = (texture2D(u_texture, v_texcoord + vec2(0.0, -1.0) * w * onePixel).w),
-    l = (texture2D(u_texture, v_texcoord + vec2(-1.0, 0.0) * w * onePixel).w),
-    r = (texture2D(u_texture, v_texcoord + vec2(1.0, 0.0) * w * onePixel).w),
-    b = (texture2D(u_texture, v_texcoord + vec2(0.0, 1.0) * w * onePixel).w);
- 
-  vec2 n = vec2(-(t - b), r - l);
-  float nl = length(n);
 
-  if	(nl < (1.0 / 16.0)) {
-    gl_FragColor = currColor;
-  } else {
-    n *= onePixel / nl;
-    vec4	o = currColor,
-    	t0 = texture2D(u_texture, v_texcoord + n * 0.5) * 0.9,
-    	t1 = texture2D(u_texture, v_texcoord - n * 0.5) * 0.9,
-    	t2 = texture2D(u_texture, v_texcoord + n) * 0.75,
-    	t3 = texture2D(u_texture, v_texcoord - n) * 0.75;
+#ifdef ANTIALIAS1
+  vec2 vPixelViewport = onePixel;
 
-    gl_FragColor = (o + t0 + t1 + t2 + t3) / 4.3;
-  }
+float fScale = 1.4;
+
+// Offset coordinates
+vec2 upOffset = vec2( 0, vPixelViewport.y ) * fScale;
+vec2 rightOffset = vec2( vPixelViewport.x, 0 ) * fScale;
+
+float topHeight =  texture2D( u_texture, v_texcoord + upOffset).w;
+float bottomHeight =  texture2D( u_texture, v_texcoord - upOffset).w;
+float rightHeight =  texture2D( u_texture, v_texcoord + rightOffset).w;
+float leftHeight =  texture2D( u_texture, v_texcoord - rightOffset).w;
+float leftTopHeight =  texture2D( u_texture, v_texcoord - rightOffset + upOffset).w;
+float leftBottomHeight =  texture2D( u_texture, v_texcoord - rightOffset - upOffset).w;
+float rightBottomHeight =  texture2D( u_texture, v_texcoord + rightOffset + upOffset).w;
+float rightTopHeight =  texture2D( u_texture, v_texcoord + rightOffset - upOffset).w;
+  
+// Normal map creation
+float sum0 = rightTopHeight+ topHeight + rightBottomHeight;
+float sum1 = leftTopHeight + bottomHeight + leftBottomHeight;
+float sum2 = leftTopHeight + leftHeight + topHeight;
+float sum3 = leftBottomHeight + rightHeight + rightBottomHeight;
+
+float vec1 = (sum1 - sum0);
+float vector2 = (sum2 - sum3);
+
+// Put them together and scale.
+vec2 Normal = vec2( vec1, vector2) * vPixelViewport * fScale;
+
+// Color
+vec4 Scene0 = texture2D( u_texture, v_texcoord);
+vec4 Scene1 = texture2D( u_texture, v_texcoord + Normal.xy );
+vec4 Scene2 = texture2D( u_texture, v_texcoord - Normal.xy );
+vec4 Scene3 = texture2D( u_texture, v_texcoord + vec2(Normal.x, -Normal.y) * 0.5 );
+vec4 Scene4 = texture2D( u_texture, v_texcoord - vec2(Normal.x, -Normal.y) * 0.5 );
+
+// Final color
+gl_FragColor = (Scene0 + Scene1 + Scene2 + Scene3 + Scene4) * 0.2;
   
   
-  /**
+#else
   
-  #ifdef ANTIALIAS
   //Blur?
   float nearBy =
   -texture2D(u_texture, v_texcoord + onePixel * vec2( 0, 1)).w -
@@ -329,19 +344,16 @@ void main(void) {
   //float darkness = 1.0 - clamp(nearBy/2.0 * 0.4 + (1.0-currColor.w) * 0.6, 0.0, 1.0); //Also works
   nearBy = 1.0-nearBy/4.0;
   //2 adj -> 50% or less
-  #else
-  float nearby = 1.0;
-  #endif
   
   //If something is near by
   //TODO pow()?
   gl_FragColor = vec4(currColor.xyz * pow(nearBy * (1.0-(1.0-currColor.w)*0.5), 2.0),1.0);//* (nearBy) + currColor.xyz * (1.0 - nearBy),1.0);
-  
+ #endif 
   //blur = vec3(1.0,0,0);
   //blur = blur * (currColor.w / 2.0 + 0.5);
   //blur *= (currColor.w * (1.0 - 0.2)) + 0.2;
   
-  */
+  
 }`;
 
 
