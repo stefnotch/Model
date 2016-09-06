@@ -1,6 +1,5 @@
 /*global sidebarStupidFirefox postProcess*/
 var rigging = false;
-var outlines = true;
 var dots = false;
 var shadowOnlyDots = false;
 
@@ -34,10 +33,6 @@ function optionClick(event) {
             break;
         case "rig":
             rigging = !rigging;
-            this.classList.toggle("enabled");
-            break;
-        case "outlines": 
-            outlines = !outlines;
             this.classList.toggle("enabled");
             break;
         case "dots":
