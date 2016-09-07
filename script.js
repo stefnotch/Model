@@ -157,7 +157,7 @@ function redraw() {
 
 
   //Projection matrix => Mat4.makePerspective
-  var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 400));
+  var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 200));
 
   var boneMat = calculateBones();
   if (mouse.clicked) {

@@ -37,6 +37,7 @@ void main(void) {
     
     vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y) * normalize(a_normal.xy) * 2.0;
     vec4 clip = u_matrix * vec4(position, 1.0);
+    clip.z += 0.1; //Bias, dirty hack but works (Prevents z buffer fighting between the front and back face)
     gl_Position = vec4(clip.xyz + vec3(clip.w * onePixel, 0.0), clip.w);
     
 }`;
@@ -55,7 +56,7 @@ void main(void){
 
   vec4 blendDQ[2];
 
-  blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
+  blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x + a_normal * 0.00001) + 0)];
   blendDQ[1] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 1)];
   
   //if((a_boneWeight != 0.5)){
@@ -72,7 +73,7 @@ void main(void){
     position += trans;
 
   //Matrix multiplication order!
-  gl_Position = u_matrix * vec4(position + a_normal * 0.00001, 1.0);
+  gl_Position = u_matrix * vec4(position, 1.0);
   v_textureCoord = a_texcoord;
 }`;
 
