@@ -145,6 +145,7 @@ void main(void) {
 var ppFShader = `
 #extension GL_OES_standard_derivatives : enable
 #define SMOOTHLIGHT
+#define COLORFXAA
 precision mediump float;
 varying vec2 v_texcoord;
 uniform vec2 u_windowSize;
@@ -156,7 +157,6 @@ void main(void) {
   vec2 onePixel = vec2(1.0)/u_windowSize;
   vec4 currColor = texture2D(u_texture, v_texcoord);
   vec3 rgb2lum = vec3(0.30, 0.59, 0.11);
-    
 
   float colorEdge =
   -dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, -1)).xyz,rgb2lum)
@@ -183,7 +183,7 @@ void main(void) {
   +dot(v_normal,rgb2lum) * 8.0;
 
   float light = dot(v_normal * 2.0 - 1.0, normalize(u_light));
-  float darkness = (1.0 - clamp(-colorEdge,0.0,1.0) - clamp(normalsEdge,0.1,1.0) + 0.1) * currColor.w;
+  float darkness = pow((1.0 - clamp(-colorEdge,0.0,1.0) - clamp(normalsEdge,0.1,1.0) + 0.1) * currColor.w,2.0);
   
   #ifdef SMOOTHLIGHT
   float E = fwidth(light);
@@ -215,15 +215,26 @@ void main(void) {
     vec3 fragcolor = mix(black, white, 
                          smoothstep(radius-afwidth, radius+afwidth, dist)
                         );
+    #ifdef DOTSFXAA
+    gl_FragColor = vec4(vec3(1)
+        #ifdef SHADOW_ONLY_DOTS
+        * step(0.2,dot(src,vec3(0.30, 0.59, 0.11)))
+        #endif
+      , fragcolor);
+    #else
     gl_FragColor = vec4(fragcolor
-    #ifdef SHADOW_ONLY_DOTS
-    * step(0.2,dot(src,vec3(0.30, 0.59, 0.11)))
+        #ifdef SHADOW_ONLY_DOTS
+        * step(0.2,dot(src,vec3(0.30, 0.59, 0.11)))
+        #endif
+      , 1.0);
     #endif
-    , 1.0);
     
   #else
-  //gl_FragColor = vec4(src * 2.0 * light * colorEdge * normalsSum, colorEdge * normalsSum);
-  gl_FragColor = vec4(src * 2.0 * light,  darkness);
+    #ifdef COLORFXAA
+      gl_FragColor = vec4(src * 2.0 * light,  darkness);
+    #else
+      gl_FragColor = vec4(src * 2.0 * light * darkness,  1.0);
+    #endif
   #endif
   
   //if(light > 0.5){
@@ -243,7 +254,6 @@ void main(void) {
 `;
 
 var ppAAFShader = `
-
 precision mediump float;
 varying vec2 v_texcoord;
 uniform vec2 u_windowSize;
@@ -252,9 +262,8 @@ uniform sampler2D u_texture;
 #define FXAA_REDUCE_MUL   (1.0/FXAA_SPAN_MAX)
 #define FXAA_REDUCE_MIN   (1.0/128.0)
 #define FXAA_SUBPIX_SHIFT (1.0/4.0)
-#define WONLY
 
-#ifdef WONLY
+//w only FXAA
 vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
     
     float rgbNW = texture2D(tex, uv.zw).w;
@@ -299,7 +308,28 @@ vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
     
     return rgbB.xyz * rgbB.w; 
 }
-#else
+void main(void) {
+  vec2 texXY = v_texcoord;
+  vec2 onePixel = vec2(1.0)/u_windowSize;
+  vec4 currColor = texture2D(u_texture, texXY);
+
+  vec4 uv = vec4( texXY, texXY - (onePixel * (0.5 + FXAA_SUBPIX_SHIFT)));
+gl_FragColor = vec4(
+    FxaaPixelShader( uv, u_texture, onePixel )
+,1.0);
+  
+  //gl_FragColor = vec4(currColor.xyz,1.0);//* (nearBy) + currColor.xyz * (1.0 - nearBy),1.0);
+  //blur = vec3(1.0,0,0);
+  //blur = blur * (currColor.w / 2.0 + 0.5);
+  //blur *= (currColor.w * (1.0 - 0.2)) + 0.2;
+  
+}`;
+
+
+//#extension GL_OES_standard_derivatives : enable
+
+
+/* Color FXAA
 vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
     
     vec3 rgbNW = texture2D(tex, uv.zw).xyz;
@@ -344,23 +374,4 @@ vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
     
     return rgbB; 
 }
-#endif
-void main(void) {
-  vec2 texXY = v_texcoord;
-  vec2 onePixel = vec2(1.0)/u_windowSize;
-  vec4 currColor = texture2D(u_texture, texXY);
-
-  vec4 uv = vec4( texXY, texXY - (onePixel * (0.5 + FXAA_SUBPIX_SHIFT)));
-gl_FragColor = vec4(
-    FxaaPixelShader( uv, u_texture, onePixel )
-,1.0);
-  
-  //gl_FragColor = vec4(currColor.xyz,1.0);//* (nearBy) + currColor.xyz * (1.0 - nearBy),1.0);
-  //blur = vec3(1.0,0,0);
-  //blur = blur * (currColor.w / 2.0 + 0.5);
-  //blur *= (currColor.w * (1.0 - 0.2)) + 0.2;
-  
-}`;
-
-
-//#extension GL_OES_standard_derivatives : enable
+*/

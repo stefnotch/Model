@@ -307,58 +307,79 @@ function createShader(shaderCode, shaderType) {
   return shader;
 }
 
-function ShaderProg(vShader, fShader) {
+function ShaderProg(vShaderCode, fShaderCode) {
   // Put the vertex shader and fragment shader together into
   // a complete program
-  var shaderProgram = gl.createProgram();
-  this.vShaderProg = createShader(vShader, gl.VERTEX_SHADER);
-  this.fShaderProg = createShader(fShader, gl.FRAGMENT_SHADER);
-  gl.attachShader(shaderProgram, this.vShaderProg);
-  gl.attachShader(shaderProgram, this.fShaderProg);
-  this.compile = function() {
-    gl.linkProgram(shaderProgram);
-    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
-      throw new Error(gl.getProgramInfoLog(shaderProgram));
-    var nu = gl.getProgramParameter(shaderProgram, gl.ACTIVE_UNIFORMS);
+  this.prog = gl.createProgram();
+  this.vShaderProg = createShader(vShaderCode, gl.VERTEX_SHADER);
+  this.fShaderProg = createShader(fShaderCode, gl.FRAGMENT_SHADER);
+  gl.attachShader(this.prog, this.vShaderProg);
+  gl.attachShader(this.prog, this.fShaderProg);
+
+  function compile() {
+    gl.linkProgram(this.prog);
+    if (!gl.getProgramParameter(this.prog, gl.LINK_STATUS))
+      throw new Error(gl.getProgramInfoLog(this.prog));
+    var nu = gl.getProgramParameter(this.prog, gl.ACTIVE_UNIFORMS);
     this.uniforms = {};
     this.texUniforms = {};
     for (var i = 0; i < nu; ++i) {
-      var uniformName = gl.getActiveUniform(shaderProgram, i).name;
+      var uniformName = gl.getActiveUniform(this.prog, i).name;
       if (uniformName.toLowerCase().indexOf("tex") == -1) {
-        this.uniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+        this.uniforms[uniformName] = gl.getUniformLocation(this.prog, uniformName);
       } else {
-        this.texUniforms[uniformName] = gl.getUniformLocation(shaderProgram, uniformName);
+        this.texUniforms[uniformName] = gl.getUniformLocation(this.prog, uniformName);
       }
     }
-    this.prog = shaderProgram;
   };
 
-  this.compile();
+  compile.call(this);
+  //Extract the #defines
 
-  this.vShader = vShader;
-  this.fShader = fShader;
+  this.vShaderHeader = {};
+  vShaderCode = vShaderCode.replace(/#define ([A-Za-z0-9_]+)\n?/g, (match, group1) => {
+    this.vShaderHeader[group1] = true;
+    return "";
+  });
 
-  this.vShaderHeader = "";
-  this.fShaderHeader = "";
+  this.fShaderHeader = {};
+  fShaderCode = fShaderCode.replace(/#define ([A-Za-z0-9_]+)\n?/g, (match, group1) => {
+    this.fShaderHeader[group1] = true;
+    return "";
+  });
 
-  this.setVSource = function(header, newSource) {
-    this.vShaderHeader = header == undefined ? this.vShaderHeader : header;
-    this.vShader = newSource == undefined ? this.vShader : newSource;
-    gl.shaderSource(this.vShaderProg, this.vShaderHeader + this.vShader);
+  console.log(fShaderCode);
+  console.log(this.fShaderHeader);
+  this.vShaderCode = vShaderCode;
+  this.fShaderCode = fShaderCode;
+
+
+
+  this.recompileV = function() {
+    gl.shaderSource(this.vShaderProg, headerToString(this.vShaderHeader) + this.vShaderCode);
     gl.compileShader(this.vShaderProg);
     if (gl.getShaderParameter(this.vShaderProg, gl.COMPILE_STATUS)) {
-      this.compile();
+      compile.call(this);
     }
   };
-  this.setFSource = function(header, newSource) {
-    this.fShaderHeader = header == undefined ? this.fShaderHeader : header;
-    this.fShader = newSource == undefined ? this.fShader : newSource;
-    gl.shaderSource(this.fShaderProg, this.fShaderHeader + this.fShader);
+
+  this.recompileF = function() {
+    gl.shaderSource(this.fShaderProg, headerToString(this.fShaderHeader) + this.fShaderCode);
     gl.compileShader(this.fShaderProg);
     if (gl.getShaderParameter(this.fShaderProg, gl.COMPILE_STATUS)) {
-      this.compile();
+      compile.call(this);
     }
   };
+
+  function headerToString(header) {
+    var returnString = "";
+    Object.keys(header).forEach(function(key) {
+      if (header[key]) {
+        returnString += "#define " + key + "\n";
+      }
+    });
+    return returnString;
+  }
 }
 
 /**

@@ -2,6 +2,8 @@
 var rigging = false;
 var dots = false;
 var shadowOnlyDots = false;
+var dotsFXAA = false;
+var colorFXAA = true;
 
 function initSidebar() {
     var options = sidebarStupidFirefox.getElementsByTagName("button");
@@ -38,32 +40,57 @@ function optionClick(event) {
         case "dots":
             dots = !dots;
             this.classList.toggle("enabled");
-            if(dots){
-                postProcess.shader.setFSource("#define DOTS");
+            if (dots) {
+                postProcess.shader.fShaderHeader["DOTS"] = true;
+                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
+                postProcess.shader.recompileF();
             } else {
-                postProcess.shader.setFSource("");
+                postProcess.shader.fShaderHeader["DOTS"] = false;
+                postProcess.shader.recompileF();
             }
             break;
         case "dots2":
             shadowOnlyDots = !shadowOnlyDots;
             this.classList.toggle("enabled");
-            if(shadowOnlyDots){
-                postProcess.shader.setFSource("#define SHADOW_ONLY_DOTS\n#define DOTS"); //TODO Make this better
+            if (shadowOnlyDots) {
+                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = true;
+                postProcess.shader.fShaderHeader["DOTS"] = true;
+                postProcess.shader.recompileF();
             } else {
-                postProcess.shader.setFSource("");
+                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
+                postProcess.shader.fShaderHeader["DOTS"] = false;
+                postProcess.shader.recompileF();
             }
             break;
-            
-        case "set light":
-             var yawRad = Mat4.degToRad(yaw);
-            var pitchRad = Mat4.degToRad(pitch);
-            lightRot = [
-                -Math.sin(yawRad) * Math.cos(pitchRad), 
-                Math.sin(pitchRad), 
-                -Math.cos(yawRad) * Math.cos(pitchRad)
-                ];
+        case "fxaa for dots":
+            dotsFXAA = !dotsFXAA;
+            this.classList.toggle("enabled");
+            if (dotsFXAA) {
+                postProcess.shader.fShaderHeader["DOTSFXAA"] = true;
+                postProcess.shader.recompileF();
+            } else {
+                postProcess.shader.fShaderHeader["DOTSFXAA"] = false;
+                postProcess.shader.recompileF();
+            }
             break;
-
+        case "fxaa for color":
+            colorFXAA = !colorFXAA;
+            this.classList.toggle("enabled");
+            if (colorFXAA) {
+                postProcess.shader.fShaderHeader["COLORFXAA"] = true;
+                postProcess.shader.recompileF();
+            } else {
+                postProcess.shader.fShaderHeader["COLORFXAA"] = false;
+                postProcess.shader.recompileF();
+            }
+            break;
+        case "set light":
+            var yawRad = Mat4.degToRad(yaw);
+            var pitchRad = Mat4.degToRad(pitch);
+            lightRot = [-Math.sin(yawRad) * Math.cos(pitchRad),
+                Math.sin(pitchRad), -Math.cos(yawRad) * Math.cos(pitchRad)
+            ];
+            break;
     }
 
 }
