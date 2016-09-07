@@ -1,4 +1,4 @@
-/*global sidebarStupidFirefox postProcess*/
+/*global sidebarStupidFirefox postProcessOutline*/
 var rigging = false;
 var dots = false;
 var shadowOnlyDots = false;
@@ -41,47 +41,47 @@ function optionClick(event) {
             dots = !dots;
             this.classList.toggle("enabled");
             if (dots) {
-                postProcess.shader.fShaderHeader["DOTS"] = true;
-                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["DOTS"] = true;
+                postProcessOutline.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
+                postProcessOutline.shader.recompileF();
             } else {
-                postProcess.shader.fShaderHeader["DOTS"] = false;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["DOTS"] = false;
+                postProcessOutline.shader.recompileF();
             }
             break;
         case "dots2":
             shadowOnlyDots = !shadowOnlyDots;
             this.classList.toggle("enabled");
             if (shadowOnlyDots) {
-                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = true;
-                postProcess.shader.fShaderHeader["DOTS"] = true;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = true;
+                postProcessOutline.shader.fShaderHeader["DOTS"] = true;
+                postProcessOutline.shader.recompileF();
             } else {
-                postProcess.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
-                postProcess.shader.fShaderHeader["DOTS"] = false;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["SHADOW_ONLY_DOTS"] = false;
+                postProcessOutline.shader.fShaderHeader["DOTS"] = false;
+                postProcessOutline.shader.recompileF();
             }
             break;
         case "fxaa for dots":
             dotsFXAA = !dotsFXAA;
             this.classList.toggle("enabled");
             if (dotsFXAA) {
-                postProcess.shader.fShaderHeader["DOTSFXAA"] = true;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["DOTSFXAA"] = true;
+                postProcessOutline.shader.recompileF();
             } else {
-                postProcess.shader.fShaderHeader["DOTSFXAA"] = false;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["DOTSFXAA"] = false;
+                postProcessOutline.shader.recompileF();
             }
             break;
         case "fxaa for color":
             colorFXAA = !colorFXAA;
             this.classList.toggle("enabled");
             if (colorFXAA) {
-                postProcess.shader.fShaderHeader["COLORFXAA"] = true;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["COLORFXAA"] = true;
+                postProcessOutline.shader.recompileF();
             } else {
-                postProcess.shader.fShaderHeader["COLORFXAA"] = false;
-                postProcess.shader.recompileF();
+                postProcessOutline.shader.fShaderHeader["COLORFXAA"] = false;
+                postProcessOutline.shader.recompileF();
             }
             break;
         case "set light":

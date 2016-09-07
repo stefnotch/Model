@@ -75,7 +75,7 @@ var mouse = {
 };
 
 
-var postProcess;
+var postProcessOutline;
 var postProcessObj;
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
@@ -110,7 +110,7 @@ function start() {
     vaoExt = gl.getExtension("OES_vertex_array_object");
     //Standard derivatives
     gl.getExtension("OES_standard_derivatives");
-    postProcess = new setUpRenderer(ppVShader, ppFShader, renderPP);
+    postProcessOutline = new setUpRenderer(ppVShader, ppFShader, renderPP);
     postProcessObj = createObjectToDraw("postprocess", new ShaderProg(ppAAVShader, ppAAFShader), [-1, -1,
         1, -1, -1, 1,
         1, 1
@@ -173,7 +173,7 @@ function redraw() {
 
   normalsRenderer.render(objectsToDraw, matrix, boneMat);
   mainRenderer.render(objectsToDraw, matrix, boneMat);
-  postProcess.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
+  postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.cullFace(gl.BACK); //Not needed?
@@ -181,7 +181,7 @@ function redraw() {
 
   gl.activeTexture(gl.TEXTURE0);
   gl.uniform1i(postProcessObj.shader.texUniforms["u_texture"], 0);
-  gl.bindTexture(gl.TEXTURE_2D, postProcess.tex);
+  gl.bindTexture(gl.TEXTURE_2D, postProcessOutline.tex);
 
   gl.uniform2f(postProcessObj.shader.uniforms["u_windowSize"], gl.drawingBufferWidth, gl.drawingBufferHeight);
   vaoExt.bindVertexArrayOES(postProcessObj.vao);
