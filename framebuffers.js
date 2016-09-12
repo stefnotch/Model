@@ -130,7 +130,7 @@ function setUpRenderer(vShader, fShader, renderFunction, sizeX, sizeY) {
 function renderNormals(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
+    
     gl.cullFace(gl.BACK);
     gl.useProgram(this.shader.prog);
     //Uniforms
@@ -164,7 +164,7 @@ function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
         Object.keys(object.shader.texUniforms).forEach(function(key, index) {
             gl.activeTexture(gl.TEXTURE0 + index);
             gl.uniform1i(object.shader.texUniforms[key], index);
-            gl.bindTexture(gl.TEXTURE_2D, object.textures[index]);
+            gl.bindTexture(gl.TEXTURE_2D, object.texture);
         });
 
         //Uniforms such as the matrix
@@ -181,9 +181,9 @@ function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
 
     //OUTLINE
     gl.cullFace(gl.FRONT);
-    gl.blendFunc(gl.DST_COLOR, gl.ZERO);
-    //gl.blendEquation(gl.FUNC_SUBTRACT);
-    gl.enable(gl.BLEND);
+    //gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    ////gl.blendEquation(gl.FUNC_SUBTRACT);
+    //gl.enable(gl.BLEND);
     //Check what is faster: moving this into the other loop or leaving it this way
     //What shader program
     gl.useProgram(this.shader.prog);
@@ -197,7 +197,7 @@ function renderMain(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
         //Draw the outlines
         gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
     });
-    gl.disable(gl.BLEND);
+    //gl.disable(gl.BLEND);
 }
 
 function renderPP(ppObject, mainTex, normalsTex) {

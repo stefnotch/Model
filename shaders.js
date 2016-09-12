@@ -35,7 +35,7 @@ void main(void) {
     
     //gl_Position = u_matrix * vec4(position + normal * 0.01, 1.0);
     
-    vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y) * normalize(a_normal.xy) * 2.0;
+    vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y) * normalize(a_normal.xy) * 3.0;
     vec4 clip = u_matrix * vec4(position, 1.0);
     clip.z += 0.1; //Bias, dirty hack but works (Prevents z buffer fighting between the front and back face)
     gl_Position = vec4(clip.xyz + vec3(clip.w * onePixel, 0.0), clip.w);
@@ -139,7 +139,7 @@ varying vec2 v_texcoord;
 
 void main(void) {
   gl_Position = vec4(a_coordinate, 0.0, 1.0);
-  v_texcoord = (a_coordinate + 1.0) / 2.0;
+  v_texcoord = (a_coordinate + 1.0) * 0.5;
 }
 `;
 
@@ -232,9 +232,9 @@ void main(void) {
     
   #else
     #ifdef COLORFXAA
-      gl_FragColor = vec4(src * 2.0 * light,  darkness);
-    #else
       gl_FragColor = vec4(src * 2.0 * light * darkness,  1.0);
+    #else
+      gl_FragColor = vec4(src * 2.0 * light,  darkness);
     #endif
   #endif
   
@@ -250,7 +250,7 @@ varying vec2 v_texcoord;
 
 void main(void) {
   gl_Position = vec4(a_coordinate, 0.0, 1.0);
-  v_texcoord = (a_coordinate + 1.0) / 2.0;
+  v_texcoord = (a_coordinate + 1.0) * 0.5;
 }
 `;
 
@@ -262,7 +262,7 @@ uniform sampler2D u_texture;
 #define FXAA_SPAN_MAX 8.0
 #define FXAA_REDUCE_MUL   (1.0/FXAA_SPAN_MAX)
 #define FXAA_REDUCE_MIN   (1.0/128.0)
-#define FXAA_SUBPIX_SHIFT (1.0/4.0)
+#define FXAA_SUBPIX_SHIFT (1.0/8.0)
 
 //w only FXAA
 vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
@@ -309,6 +309,53 @@ vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
     
     return rgbB.xyz * rgbB.w; 
 }
+
+/**
+vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {
+    
+    vec3 rgbNW = texture2D(tex, uv.zw).xyz;
+    vec3 rgbNE = texture2D(tex, uv.zw + vec2(1,0)*rcpFrame.xy).xyz;
+    vec3 rgbSW = texture2D(tex, uv.zw + vec2(0,1)*rcpFrame.xy).xyz;
+    vec3 rgbSE = texture2D(tex, uv.zw + vec2(1,1)*rcpFrame.xy).xyz;
+    vec3 rgbM  = texture2D(tex, uv.xy).xyz;
+
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+    float lumaNW = dot(rgbNW, luma);
+    float lumaNE = dot(rgbNE, luma);
+    float lumaSW = dot(rgbSW, luma);
+    float lumaSE = dot(rgbSE, luma);
+    float lumaM  = dot(rgbM,  luma);
+
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
+
+    vec2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    float dirReduce = max(
+        (lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * FXAA_REDUCE_MUL),
+        FXAA_REDUCE_MIN);
+    float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y)) + dirReduce);
+    
+    dir = min(vec2( FXAA_SPAN_MAX,  FXAA_SPAN_MAX),
+          max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX),
+          dir * rcpDirMin)) * rcpFrame.xy;
+
+    vec3 rgbA = (1.0/2.0) * (
+        texture2D(tex, uv.xy + dir * (1.0/3.0 - 0.5)).xyz +
+        texture2D(tex, uv.xy + dir * (2.0/3.0 - 0.5)).xyz);
+    vec3 rgbB = rgbA * (1.0/2.0) + (1.0/4.0) * (
+        texture2D(tex, uv.xy + dir * (0.0/3.0 - 0.5)).xyz +
+        texture2D(tex, uv.xy + dir * (3.0/3.0 - 0.5)).xyz);
+    
+    float lumaB = dot(rgbB, luma);
+
+    if((lumaB < lumaMin) || (lumaB > lumaMax)) return rgbA;
+    
+    return rgbB; 
+}
+*/
 void main(void) {
   vec2 texXY = v_texcoord;
   vec2 onePixel = vec2(1.0)/u_windowSize;

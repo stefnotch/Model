@@ -3,7 +3,7 @@ body {
 }
 
 #glcanvas {
-  outline: 1px solid black;
+  background-color: black;
   margin: 0px;
   padding: 0px;
   display: block;

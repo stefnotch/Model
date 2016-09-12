@@ -98,13 +98,28 @@ function start() {
   gl = initWebGL(glcanvas);
 
   if (gl) {
+    // Put the vertex shader and fragment shader together into
+    // a complete program
+    var shaderProgram = new ShaderProg(vertexShader, fragmentShader); //eslint-disable-line
+
+    Promise.all([
+      loadModelFile("Model/cat/output.modelfile", "Model/cat", shaderProgram)
+    ]).then((stuff) => {
+      //DO SOMETHING
+      glcanvas.style.backgroundColor = "white";
+      window.requestAnimationFrame(redraw);
+    }).catch((error) => {
+      glcanvas.style.backgroundColor = "red";
+      throw error;
+    });
+
     setUpBones();
     //setUpPicker();
     normalsRenderer = new setUpRenderer(normalsVShader, normalsFShader, renderNormals);
     mainRenderer = new setUpRenderer(celLineVertexShader, `
     precision mediump float;
     void main() {
-      gl_FragColor = vec4(1,1,1, 0.0);  // Alpha
+      gl_FragColor = vec4(0,0,0, 0.0);  // Alpha
     }`, renderMain);
 
     vaoExt = gl.getExtension("OES_vertex_array_object");
@@ -117,14 +132,12 @@ function start() {
       ], [
         ["a_coordinate", 2, false]
       ],
-      undefined
+      undefined, undefined
     );
 
-    // Put the vertex shader and fragment shader together into
-    // a complete program
-    var shaderProgram = new ShaderProg(vertexShader, fragmentShader); // jshint ignore:line
     for (var i = 0; i < model.length; i++) {
-      addObjectToDraw("cat", shaderProgram, model[i].model, undefined, [model[i].name]);
+      var tex = model[i].name.split(";");
+      //addObjectToDraw("Model/cat", shaderProgram, model[i].model, undefined, tex[0], [+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]);
     }
     //Get rid of model, make it easier for the garbage collector
     //model = null;
@@ -137,8 +150,6 @@ function start() {
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
     gl.disable(gl.BLEND);
-
-    window.requestAnimationFrame(redraw);
   }
 }
 
@@ -348,12 +359,8 @@ function ShaderProg(vShaderCode, fShaderCode) {
     return "";
   });
 
-  console.log(fShaderCode);
-  console.log(this.fShaderHeader);
   this.vShaderCode = vShaderCode;
   this.fShaderCode = fShaderCode;
-
-
 
   this.recompileV = function() {
     gl.shaderSource(this.vShaderProg, headerToString(this.vShaderHeader) + this.vShaderCode);
@@ -411,7 +418,7 @@ function setAttributes(attributes, shader, offset) {
 /**
  * Creates an object (VAO) to draw
  */
-function createObjectToDraw(name, shader, object, attributes, textures) {
+function createObjectToDraw(name, shader, modelData, attributes, textureName, color) {
   if (attributes == undefined) {
     attributes = [
       ["a_coordinate", 3, false],
@@ -431,69 +438,74 @@ function createObjectToDraw(name, shader, object, attributes, textures) {
 
   //CO, UV, NORMALS
   var numberOfAttributes = setAttributes(attributes, shader.prog);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(object), gl.STATIC_DRAW);
+  if (modelData instanceof Float32Array) {
+    gl.bufferData(gl.ARRAY_BUFFER, modelData, gl.STATIC_DRAW);
+  } else {
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(modelData), gl.STATIC_DRAW);
+  }
+
 
   vaoExt.bindVertexArrayOES(null);
 
   return {
     shader: shader,
     vao: vao,
-    bufferLength: (object.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
-    textures: loadTextures(textures, "Model/" + name),
+    bufferLength: (modelData.length / numberOfAttributes), //Subtract the UVs, subtract the vertex normals
+    texture: loadTextures(textureName, color, name),
   };
 }
 
-function addObjectToDraw(name, shader, object, attributes, textures) {
+function addObjectToDraw(name, shader, modelData, attributes, texture, color) {
   objectsToDraw.push(
-    createObjectToDraw(name, shader, object, attributes, textures));
+    createObjectToDraw(name, shader, modelData, attributes, texture, color));
 }
 
 /**
  * Loads a texture from a URL
  */
-function loadTextures(textureLocations, prefix) {
-  if (textureLocations == undefined) {
+function loadTextures(textureName, color, prefix) {
+  if (textureName == undefined) {
     return null;
   }
-  var returnTextures = [];
-  for (var i = 0; i < textureLocations.length; i++) {
-    // Create a texture.
-    var texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    var tex = textureLocations[i].split(";");
-    //If it is a nonexistent texture
-    if (textureLocations[i].indexOf("nonexistent.png") > -1) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-        new Uint8Array([+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]));
-    } else {
-      // Fill the texture with a 1x1 blue pixel.
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
-        new Uint8Array([0, 0, 255, 255]));
-
-      // Asynchronously load an image
-      var image = new Image();
-      image.src = prefix + "/" + tex[0];
-
-      image.addEventListener('load', function() {
-        //Bind the texture
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
-          // Scale up the texture to the next highest power of two dimensions.
-          var canvas = document.createElement("canvas");
-          canvas.width = nextHighestPowerOfTwo(image.width);
-          canvas.height = nextHighestPowerOfTwo(image.height);
-          var ctx = canvas.getContext("2d");
-          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-          image = canvas;
-        }
-        // Now that the image has loaded make copy it to the texture.
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-        gl.generateMipmap(gl.TEXTURE_2D);
-      });
+  // Create a texture.
+  var texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  //If it is a nonexistent texture
+  if (textureName.indexOf("nonexistent.png") > -1 && color != undefined) {
+    console.log(textureName);
+    if (color.length == 3) { //If it is an RGB color
+      color.push(255);
     }
-    returnTextures.push(texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array(color));
+  } else {
+    // Fill the texture with a 1x1 blue pixel.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([0, 0, 255, 255]));
+
+    // Asynchronously load an image
+    var image = new Image();
+
+    image.addEventListener('load', function() {
+      //Bind the texture
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      if (!isPowerOfTwo(image.width) || !isPowerOfTwo(image.height)) {
+        // Scale up the texture to the next highest power of two dimensions.
+        var canvas = document.createElement("canvas");
+        canvas.width = nextHighestPowerOfTwo(image.width);
+        canvas.height = nextHighestPowerOfTwo(image.height);
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        image = canvas;
+      }
+      // Now that the image has loaded make copy it to the texture.
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+      gl.generateMipmap(gl.TEXTURE_2D);
+    });
+    image.src = prefix + "/" + textureName;
   }
-  return returnTextures;
+
+  return texture;
 }
 
 function isPowerOfTwo(x) {
@@ -508,6 +520,85 @@ function nextHighestPowerOfTwo(x) {
   return x + 1;
 }
 
+function loadModelFile(url, texUrl, shaderProgram) {
+  //Better than XMLHttpRequest, because the name is shorter!
+  return fetch(url, {
+    method: "get"
+  }).then((response) => {
+    if (response.status === 200) {
+      //response.arrayBuffer().then((hi) => {
+      //  console.log(hi[0]);
+      //});
+      return response.arrayBuffer().then((arrayBuffer) => {
+        var charByte = 1;
+        var floatByte = 4,
+          intByte = 4;
+        //Where are we?
+        var pointer = 0;
+        //As long as we aren't done with the file
+        while (true) {
+          var data = new DataView(arrayBuffer);
+
+          //Read the header
+          /** LENGTH_OF_STRING TEX_NAME
+           * (3_VALUES) 
+           * (NUMBER_OF_FACES_2454365473467463)
+           */
+          //Texture name
+          var stringLength = data.getInt32(pointer, true);
+          pointer += intByte;
+          var texName = "";
+          for (var i = 0; i < stringLength; i += charByte) {
+            texName += String.fromCharCode(data.getUint8(pointer + i));
+          }
+          pointer += stringLength * charByte;
+          //Color:
+          var color = [];
+          for (var i = 0; i < 3 * floatByte; i += floatByte) {
+            color.push(data.getFloat32(pointer + i, true) * 255);
+          }
+          pointer += 3 * floatByte;
+
+          /*Model format:
+           * 3 floats (pos)
+           * 2 floats (uv)
+           * 3 floats (normal)
+           * 2 floats (bone index) (Could be stored as shorts)
+           * 1 float (bone weight)
+           */
+          //Length of the array
+          var numberOfFaces = data.getInt32(pointer, true);
+          var arrayLength = numberOfFaces * 3 * (3 + 2 + 3 + 2 + 1);
+          pointer += 1 * intByte;
+          //Read the model
+          var newModel = new Float32Array(arrayLength);
+          for (var i = 0; i < newModel.length; i++) {
+            newModel[i] = data.getFloat32(pointer + i * floatByte, true);
+          }
+          pointer += arrayLength * floatByte;
+          //Whee! Everything seems to be working so far..
+          addObjectToDraw(texUrl, shaderProgram, newModel, undefined, texName, color);
+
+          if (pointer >= data.byteLength) break;
+        }
+        /*var x = Uint8Array.BYTES_PER_ELEMENT;
+        alert(
+          String.fromCharCode(data.getUint8(0), data.getUint8(1 * x), data.getUint8(2 * x), data.getUint8(3 * x))
+        );
+        var modelArray = new Float32Array(Math.floor(data.byteLength / Float32Array.BYTES_PER_ELEMENT));
+        for (var i = 0; i < modelArray.length; i++) {
+          modelArray[i] = data.getFloat32(i * Float32Array.BYTES_PER_ELEMENT, true);
+        }
+        return modelArray;
+        */
+        //Call the createObjectToDraw() fuction in here
+      });
+    } else {
+      throw new Error("fetch failed" + response.status);
+    }
+  });
+}
+
 //Init functions
 
 /**
@@ -519,15 +610,16 @@ function initCanvas(canvasName) {
   glcanvas.width = window.innerWidth;
   glcanvas.height = window.innerHeight;
   //Events
-  window.addEventListener('resize', () => {
-    glcanvas.width = window.innerWidth;
-    glcanvas.height = window.innerHeight;
-  }, false);
+  //window.addEventListener('resize', () => {
+    //glcanvas.width = window.innerWidth;
+    //glcanvas.height = window.innerHeight;
+  //}, false);
   window.addEventListener("keydown", keyboardHandlerDown);
   window.addEventListener("keyup", keyboardHandlerUp);
   window.addEventListener("wheel", scrollHandler);
   glcanvas.addEventListener("mousemove", mouseHandler);
-  glcanvas.addEventListener("touchmove", mouseHandler);
+  //TODO https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events
+  //glcanvas.addEventListener("touchmove", mouseHandler);
   glcanvas.addEventListener("click", mouseClickHandler);
 
   glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
@@ -567,7 +659,6 @@ function initWebGL(canvas) {
       alert("Your browser supports WebGL, but something screwed up.");
       gl = null;
     }
-    console.log(gl);
   } else {
     alert("No WebGL?");
   }
