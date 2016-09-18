@@ -3,7 +3,7 @@ git commit -am "your message goes here"
 git push
 */
 
-/*global model bones setUpPicker pickPixel animations setUpRenderer*/
+/*global bones setUpPicker pickPixel animations setUpRenderer*/
 /*global Mat4 Quat DualQuat*/ //Math
 /*global normalsVShader normalsFShader*/
 /*global initSidebar rigging outlines*/
@@ -14,7 +14,6 @@ git push
 //https://docs.google.com/presentation/d/12AGAUmElB0oOBgbEEBfhABkIMCL3CUX7kdAPLuwZ964/edit#slide=id.i51
 //https://hacks.mozilla.org/2014/03/introducing-the-canvas-debugger-in-firefox-developer-tools/
 /*TODO
-Create class for shader programs
 Edit the texture at runtime (Color and edge detection)
 Matrix multiplication library, they are doing everything that I can do, and better
 bones:
@@ -77,6 +76,7 @@ var mouse = {
 
 var postProcessOutline;
 var postProcessObj;
+var depthRenderer;
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
 //Called by the body
@@ -114,6 +114,7 @@ function start() {
     });
 
     setUpBones();
+    depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
     //setUpPicker();
     normalsRenderer = new setUpRenderer(normalsVShader, normalsFShader, renderNormals);
     mainRenderer = new setUpRenderer(celLineVertexShader, `
@@ -135,12 +136,7 @@ function start() {
       undefined, undefined
     );
 
-    for (var i = 0; i < model.length; i++) {
-      var tex = model[i].name.split(";");
-      //addObjectToDraw("Model/cat", shaderProgram, model[i].model, undefined, tex[0], [+tex[1] * 255, +tex[2] * 255, +tex[3] * 255, 255]);
-    }
     //Get rid of model, make it easier for the garbage collector
-    //model = null;
 
     // Everything we need has now been copied to the graphics
     // hardware, so we can start drawing
@@ -181,10 +177,10 @@ function redraw() {
       ), boneMat);*/
     mouse.clicked = false;
   }
-
+  depthRenderer.render(objectsToDraw, matrix, boneMat);
   normalsRenderer.render(objectsToDraw, matrix, boneMat);
   mainRenderer.render(objectsToDraw, matrix, boneMat);
-  postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
+  postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex, depthRenderer.tex);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.cullFace(gl.BACK); //Not needed?
@@ -472,7 +468,6 @@ function loadTextures(textureName, color, prefix) {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   //If it is a nonexistent texture
   if (textureName.indexOf("nonexistent.png") > -1 && color != undefined) {
-    console.log(textureName);
     if (color.length == 3) { //If it is an RGB color
       color.push(255);
     }
@@ -578,20 +573,8 @@ function loadModelFile(url, texUrl, shaderProgram) {
           pointer += arrayLength * floatByte;
           //Whee! Everything seems to be working so far..
           addObjectToDraw(texUrl, shaderProgram, newModel, undefined, texName, color);
-
           if (pointer >= data.byteLength) break;
         }
-        /*var x = Uint8Array.BYTES_PER_ELEMENT;
-        alert(
-          String.fromCharCode(data.getUint8(0), data.getUint8(1 * x), data.getUint8(2 * x), data.getUint8(3 * x))
-        );
-        var modelArray = new Float32Array(Math.floor(data.byteLength / Float32Array.BYTES_PER_ELEMENT));
-        for (var i = 0; i < modelArray.length; i++) {
-          modelArray[i] = data.getFloat32(i * Float32Array.BYTES_PER_ELEMENT, true);
-        }
-        return modelArray;
-        */
-        //Call the createObjectToDraw() fuction in here
       });
     } else {
       throw new Error("fetch failed" + response.status);
@@ -611,15 +594,17 @@ function initCanvas(canvasName) {
   glcanvas.height = window.innerHeight;
   //Events
   //window.addEventListener('resize', () => {
-    //glcanvas.width = window.innerWidth;
-    //glcanvas.height = window.innerHeight;
+  //glcanvas.width = window.innerWidth;
+  //glcanvas.height = window.innerHeight;
   //}, false);
   window.addEventListener("keydown", keyboardHandlerDown);
   window.addEventListener("keyup", keyboardHandlerUp);
   window.addEventListener("wheel", scrollHandler);
   glcanvas.addEventListener("mousemove", mouseHandler);
   //TODO https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events
-  //glcanvas.addEventListener("touchmove", mouseHandler);
+  glcanvas.addEventListener("touchstart", touchHandlerStart);
+  glcanvas.addEventListener("touchmove", touchHandlerMove);
+  glcanvas.addEventListener("touchend", touchHandlerEnd);
   glcanvas.addEventListener("click", mouseClickHandler);
 
   glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
@@ -798,4 +783,36 @@ function mouseClickHandler(mouseEvent) {
   mouse.Y = mouseEvent.offsetY;
   //http://www.opengl-tutorial.org/miscellaneous/clicking-on-objects/picking-with-an-opengl-hack/
   //http://stackoverflow.com/questions/21841483/webgl-using-framebuffers-for-picking-multiple-objects
+}
+
+var touchX = 0,
+  touchY = 0;
+
+function touchHandlerStart(event) {
+  event.preventDefault();
+  var touch = event.changedTouches[0];
+  touchX = touch.clientX;
+  touchY = touch.clientY;
+}
+
+function touchHandlerMove(event) {
+  event.preventDefault();
+  var touch = event.changedTouches[0];
+  if (!rigging) {
+    yaw -= (touchX - touch.clientX) / 10;
+    pitch -= (touchY - touch.clientY) / 10;
+  }
+  touchX = touch.clientX;
+  touchY = touch.clientY;
+}
+
+function touchHandlerEnd(event) {
+  event.preventDefault();
+  var touch = event.changedTouches[0];
+  if (!rigging) {
+    yaw -= (touchX - touch.clientX) / 10;
+    pitch -= (touchY - touch.clientY) / 10;
+  }
+  touchX = touch.clientX;
+  touchY = touch.clientY;
 }

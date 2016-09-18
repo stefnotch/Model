@@ -128,9 +128,9 @@ function setUpRenderer(vShader, fShader, renderFunction, sizeX, sizeY) {
 }
 
 function renderNormals(objectsToDraw, viewMatrix, boneMat, prevRenderer) {
+
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    
     gl.cullFace(gl.BACK);
     gl.useProgram(this.shader.prog);
     //Uniforms
@@ -221,6 +221,67 @@ function renderPP(ppObject, mainTex, normalsTex) {
 
     //Draw the object
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, ppObject.bufferLength);
+}
+
+
+function depthRenderer(vShader, fShader, renderFunction, sizeX, sizeY) {
+    if (sizeX == undefined) {
+        sizeX = gl.drawingBufferWidth;
+    }
+    if (sizeY == undefined) {
+        sizeY = gl.drawingBufferHeight;
+    }
+
+    var depthTextureExt = gl.getExtension("WEBGL_depth_texture");
+    if (!depthTextureExt) {
+        alert("No depth textures supported.");
+        return;
+    }
+    // Create the depth texture
+    this.tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    //Feel free to make the texture a power of 2
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, gl.drawingBufferWidth, gl.drawingBufferHeight, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+
+    //Framebuffer
+    this.framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.tex, 0);
+
+    //Renderbuffer for the depth test
+    this.renderbuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderbuffer);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.renderbuffer);
+
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+        alert("this combination of attachments does not work");
+        return;
+    }
+    this.shader = new ShaderProg(vShader, fShader);
+    this.render = renderFunction;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
+}
+
+function renderDepth(objectsToDraw, viewMatrix, boneMat) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.framebuffer);
+    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.cullFace(gl.BACK);
+    gl.useProgram(this.shader.prog);
+    //Uniforms
+    gl.uniform4fv(this.shader.uniforms["u_bones[0]"], boneMat);
+    gl.uniformMatrix4fv(this.shader.uniforms["u_matrix"], false, viewMatrix);
+    objectsToDraw.forEach((object) => {
+        //Bind VAO
+        vaoExt.bindVertexArrayOES(object.vao);
+        //Draw
+        gl.drawArrays(gl.TRIANGLES, 0, object.bufferLength);
+    });
 }
 
 
