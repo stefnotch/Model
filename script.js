@@ -3,7 +3,7 @@ git commit -am "your message goes here"
 git push
 */
 
-/*global bones setUpPicker pickPixel animations setUpRenderer*/
+/*global bones setUpPicker pickPixel animations */
 /*global Mat4 Quat DualQuat*/ //Math
 /*global normalsVShader normalsFShader*/
 /*global initSidebar rigging outlines*/
@@ -50,6 +50,17 @@ Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
 Transform feedback
 Floating point textures
 */
+//Ok, that's so dirty.
+function require(){return null;}
+var glMatrix, quat2;
+var setUpRenderer;
+if(false){
+  glMatrix = require("./gl-matrix-min.js");
+  quat2 = require("./glmatrix/quat2.js");
+  setUpRenderer = require("./framebuffers.js");
+}
+
+
 var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
@@ -61,9 +72,11 @@ var pos = [-0.12583708965284524, 2.9979705362177205, 1.3783995901996082],
 //Rotation
 var pitch = 5,
   yaw = 0;
+var pitchVel = 0, yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
+var boneArray;
 
 var normalsRenderer;
 var mainRenderer;
@@ -76,7 +89,7 @@ var mouse = {
 
 var postProcessOutline;
 var postProcessObj;
-var depthRenderer;
+var pickerFramebuffer;
 //https://github.com/markaren/DualQuaternion/tree/master/src/main/java/info/laht/dualquat
 
 //Called by the body
@@ -114,8 +127,9 @@ function start() {
     });
 
     setUpBones();
-    depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
+    //depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
     //setUpPicker();
+    pickerFramebuffer = new pixelPicker(pickPixel);
     normalsRenderer = new setUpRenderer(normalsVShader, normalsFShader, renderNormals);
     mainRenderer = new setUpRenderer(celLineVertexShader, `
     precision mediump float;
@@ -157,7 +171,9 @@ function redraw() {
   pos[0] += velocity[0] * speed;
   pos[1] += velocity[1] * speed;
   pos[2] += velocity[2] * speed;
-
+  pitch += pitchVel;
+  yaw += yawVel;
+  
   var modelMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
   modelMat = Mat4.multiply(modelMat, Mat4.translation(pos[0], pos[1], pos[2]));
   var viewMat = Mat4.makeInverseCrap(modelMat);
@@ -168,19 +184,35 @@ function redraw() {
 
   var boneMat = calculateBones();
   if (mouse.clicked) {
-    //pickPixel(objectsToDraw, Mat4.multiply(matrix, Mat4.translation(-1, -1, 0)), boneMat);
     //mouse.X / glcanvas.clientWidth;
     //-mouse.Y / glcanvas.clientHeight;
-    /*pickPixel(objectsToDraw,
+    pickerFramebuffer.pickPixel(objectsToDraw,
       Mat4.multiply(matrix,
         Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, (1 - mouse.Y / glcanvas.clientHeight) * -2, 0)
-      ), boneMat);*/
+      ), boneMat);
+      
+    /*
+    sidebarStupidFirefox.style.backgroundColor = `rgba(${pickerFramebuffer.pixel[0]},
+    ${pickerFramebuffer.pixel[1]},
+    ${pickerFramebuffer.pixel[2]},255)`;
+    console.log(`rgba(${pickerFramebuffer.pixel[0]},
+    ${pickerFramebuffer.pixel[1]},
+    ${pickerFramebuffer.pixel[2]},255)`);*/
+    if(pickerFramebuffer.pixel[0] == 255){
+      displayText.value = "Nu bones to see here";
+    } else  {
+      displayText.value = bones[pickerFramebuffer.pixel[0]].name;
+      //TODO
+      //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
+      //http://www.songho.ca/opengl/files/gl_transform02.png
+      //bones[pickerFramebuffer.pixel[0]].worldDualQuat.getTranslation()
+    }
     mouse.clicked = false;
   }
-  depthRenderer.render(objectsToDraw, matrix, boneMat);
+  //depthRenderer.render(objectsToDraw, matrix, boneMat);
   normalsRenderer.render(objectsToDraw, matrix, boneMat);
   mainRenderer.render(objectsToDraw, matrix, boneMat);
-  postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex, depthRenderer.tex);
+  postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.cullFace(gl.BACK); //Not needed?
@@ -239,8 +271,7 @@ function animationStep(animationName) {
   //For each bone in the animation
   for (var i = 0; i < a.usedBones.length; i++) {
     var boneIndex = a.usedBones[i];
-    bones[boneIndex].dq.setRotation(Quat.nlerp1(
-      keyframe1[i], keyframe2[i], interpolationFactor));
+    bones[boneIndex].dq.setRotation(quat2.lerp(out, keyframe1[i], keyframe2[i], interpolationFactor));
   }
 
   a.frame += 0.05;
@@ -252,13 +283,13 @@ function animationStep(animationName) {
 }
 
 function calculateBones() {
-  var boneMat = [];
   //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
-
+    
     //Normalize the quaternions
-    bones[i].dq.normalize();
-    var localDualQuat = bones[i].dq.copy();
+    quat2.normalize(bones[i].dq, bones[i].dq);
+    //bones[i].dq.normalize();
+    var localDualQuat = quat2.clone(bones[i].dq);
     /* Mat4.multiply(
           Quat.toMat4(bones[i].qRot),
           Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
@@ -269,16 +300,32 @@ function calculateBones() {
       bones[i].worldDualQuat = localDualQuat;
     } else {
       if (bones[bones[i].parent].worldDualQuat == undefined) {
-        console.log(i);
+        console.log("Somehow, the parent bone is messed up." + i + " parent: " + bones[i].parent);
       }
 
-      bones[i].worldDualQuat = localDualQuat.multiply(bones[bones[i].parent].worldDualQuat);
+      //Chain the bones together
+      quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
     }
-    boneMat[i] = bones[i].dqInverseBindpose.copy().multiply(bones[i].worldDualQuat).toArray(); //.toMat4();
+    //Flatten it for OpenGL
+    var tempBone = quat2.create();
+    quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose); //.toMat4();
+  
+    //TODO: WXYZ
+    boneArray[i * 8] = tempBone[0][3];
+    boneArray[i * 8 + 1] = tempBone[0][0];
+    boneArray[i * 8 + 2] = tempBone[0][1];
+    boneArray[i * 8 + 3] = tempBone[0][2];
+    boneArray[i * 8 + 4] = tempBone[1][3];
+    boneArray[i * 8 + 4 + 1] = tempBone[1][0];
+    boneArray[i * 8 + 4 + 2] = tempBone[1][1];
+    boneArray[i * 8 + 4 + 3] = tempBone[1][2];
   }
-  return [].concat.apply([], boneMat); //Flatten it for OpenGL
+  return boneArray; 
 }
 
+/**
+ * Returns the index of the bone
+ */
 function boneByName(name) {
   //Loop over the other bones and find the parent
   for (var i = 0; i < bones.length; i++) {
@@ -477,7 +524,6 @@ function loadTextures(textureName, color, prefix) {
     // Fill the texture with a 1x1 blue pixel.
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
       new Uint8Array([0, 0, 255, 255]));
-
     // Asynchronously load an image
     var image = new Image();
 
@@ -515,7 +561,9 @@ function nextHighestPowerOfTwo(x) {
   return x + 1;
 }
 
+
 function loadModelFile(url, texUrl, shaderProgram) {
+  //TODO: Show progress
   //Better than XMLHttpRequest, because the name is shorter!
   return fetch(url, {
     method: "get"
@@ -642,7 +690,6 @@ function initWebGL(canvas) {
     }
     if (!gl) {
       alert("Your browser supports WebGL, but something screwed up.");
-      gl = null;
     }
   } else {
     alert("No WebGL?");
@@ -652,15 +699,24 @@ function initWebGL(canvas) {
 }
 
 function setUpBones() {
+  boneArray = new glMatrix.ARRAY_TYPE(bones.length * 8);
   for (var i = 0; i < bones.length; i++) {
-    bones[i].dq = new DualQuat();
-    bones[i].dq.fromQuatTrans(bones[i].qRot, bones[i].pos);
-    bones[i].dqInverseBindpose = new DualQuat();
-    bones[i].dqInverseBindpose.fromQuatTrans(bones[i].offsetRot, bones[i].offsetPos);
-    bones[i].dqInverseBindpose.normalize();
     if (bones[i].pos == undefined) {
       bones[i].pos = [0, 0, 0];
     }
+    //Dual Quat
+    bones[i].dq = quat2.create();
+    bones[i].worldDualQuat = quat2.create();
+    quat2.fromRotationTranslation(bones[i].dq, bones[i].qRot, bones[i].pos);
+    //bones[i].dq = new DualQuat();
+    //bones[i].dq.fromQuatTrans(bones[i].qRot, bones[i].pos);
+    //Inverse bindpose
+    bones[i].dqInverseBindpose = quat2.create();
+    quat2.fromRotationTranslation(bones[i].dqInverseBindpose, bones[i].offsetRot, bones[i].offsetPos);
+    quat2.normalize(bones[i].dqInverseBindpose, bones[i].dqInverseBindpose);
+    //bones[i].dqInverseBindpose = new DualQuat();
+    //bones[i].dqInverseBindpose.fromQuatTrans(bones[i].offsetRot, bones[i].offsetPos);
+    //bones[i].dqInverseBindpose.normalize();
     //If the bone's parent is given as a string
     if (typeof bones[i].parent == "string") {
       bones[i].parent = boneByName(bones[i].parent);
@@ -719,8 +775,10 @@ function handleDragOver(evt) {
 }
 
 function keyboardHandlerDown(keyboardEvent) {
-  var yawRad = Mat4.degToRad(yaw);
-  var pitchRad = Mat4.degToRad(pitch);
+  
+  var yawRad = glMatrix.toRadian(yaw); ;
+
+  var pitchRad = glMatrix.toRadian(pitch);
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
@@ -736,11 +794,17 @@ function keyboardHandlerDown(keyboardEvent) {
       break;
     case "KeyA":
     case "ArrowLeft":
-      yaw++;
+      //yawVel = 1;
+      velocity[0] = -Math.sin(yawRad + Math.PI/2) * Math.cos(pitchRad);
+      velocity[1] = Math.sin(pitchRad);
+      velocity[2] = -Math.cos(yawRad + Math.PI/2) * Math.cos(pitchRad);
       break;
     case "KeyD":
     case "ArrowRight":
-      yaw--;
+      //yawVel = -1;
+      velocity[0] = -Math.sin(yawRad - Math.PI/2) * Math.cos(pitchRad);
+      velocity[1] = Math.sin(pitchRad);
+      velocity[2] = -Math.cos(yawRad - Math.PI/2) * Math.cos(pitchRad);
       break;
   }
 }
@@ -763,6 +827,15 @@ function keyboardHandlerUp(keyboardEvent) {
         break;*/
     case "KeyH":
       //drawDragon = !drawDragon;
+    case "KeyA":
+    case "ArrowLeft":
+    case "KeyD":
+    case "ArrowRight":
+      velocity[0] = 0;
+      velocity[1] = 0;
+      velocity[2] = 0;
+      yawVel = 0;
+      break;
   }
 }
 

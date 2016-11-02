@@ -85,8 +85,9 @@ function optionClick(event) {
             }
             break;
         case "set light":
-            var yawRad = Mat4.degToRad(yaw);
-            var pitchRad = Mat4.degToRad(pitch);
+            
+            var yawRad = glMatrix.toRadian(yaw);
+            var pitchRad = glMatrix.toRadian(pitch);
             lightRot = [-Math.sin(yawRad) * Math.cos(pitchRad),
                 Math.sin(pitchRad), -Math.cos(yawRad) * Math.cos(pitchRad)
             ];

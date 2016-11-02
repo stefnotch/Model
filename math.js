@@ -1,3 +1,58 @@
+/*
+function mulVeryOld(q1, q2) {
+        var w1 = q1[0],
+            x1 = q1[1],
+            y1 = q1[2],
+            z1 = q1[3],
+            w2 = q2[0],
+            x2 = q2[1],
+            y2 = q2[2],
+            z2 = q2[3];
+        return [
+            (w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2), 
+            (w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2), 
+            (w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2), 
+            (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
+        ];
+    }
+
+function mulOld(q1, q2) {
+  var w1 = q1[3],
+  x1 = q1[0],
+  y1 = q1[1],
+  z1 = q1[2],
+  w2 = q2[3],
+  x2 = q2[0],
+  y2 = q2[1],
+  z2 = q2[2];
+  return [
+            (w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2), 
+            (w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2), 
+            (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2),
+(w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2)
+  ];
+}
+function mulNew(a, b) {
+  var ax = a[0],
+  ay = a[1],
+  az = a[2],
+  aw = a[3],
+  bx = b[0],
+  by = b[1],
+  bz = b[2],
+  bw = b[3];
+  return [ax * bw + aw * bx + ay * bz - az * by,
+  ay * bw + aw * by + az * bx - ax * bz,
+  az * bw + aw * bz + ax * by - ay * bx,
+  aw * bw - ax * bx - ay * by - az * bz]
+}
+
+
+
+*/
+
+
+
 var Mat4 = {
     identity: function() {
         return [
@@ -217,6 +272,7 @@ var Mat4 = {
         ];
     }
 };
+
 /**
  * WXYZ Quaternions
  */
@@ -310,7 +366,10 @@ var Quat = {
             y2 = q2[2],
             z2 = q2[3];
         return [
-            (w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2), (w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2), (w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2), (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
+            (w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2), 
+            (w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2), 
+            (w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2), 
+            (w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2)
         ];
     },
     multiplyScalar: function(q, scalar) {

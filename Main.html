@@ -6,6 +6,7 @@
   <meta charset="utf-8">
   <script src="./Model/cat/outputBones.js" type="application/javascript" defer></script>
   <script src="math.js" type="application/javascript" defer></script>
+  <script src="glmatrix/gl-matrix-min.js" type="application/javascript" defer></script>
   <script src="shaders.js" type="application/javascript" defer></script>
   <script src="framebuffers.js" type="application/javascript" defer></script>
   <script src="script.js" type="application/javascript" defer></script>
@@ -17,7 +18,7 @@
 <body onload="start()">
   <canvas id="glcanvas">Your browser doesn't appear to support the
     <code>&lt;canvas&gt;</code> element.</canvas>
-  <input id="displayText" type="text" style="display:none;position:absolute; top:10px;">
+  <input id="displayText" type="text" style="position:absolute; bottom:10px;">
 
   <!--Range input type = slider-->
   <div id="sidebarStupidFirefox">

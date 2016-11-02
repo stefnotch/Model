@@ -26,15 +26,15 @@ void main(void) {
 
     vec3 normal = a_normal + 2.0 * cross(blendDQ[0].yzw, cross(blendDQ[0].yzw, a_normal) + blendDQ[0].x * a_normal);
 
-    /*
-            vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y);
+    
+    vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y);
     if(abs(normal.x) > abs(normal.y)){
         onePixel *= vec2(sign(normal.x) * 2.0,0.0);
     } else {
         onePixel *=vec2(0.0,sign(normal.y)*2.0);
-    }*/
+    }
     
-    vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y) * normalize(normal.xy) * 2.0;
+    //vec2 onePixel = vec2(1.0 / u_windowSize.x, 1.0 / u_windowSize.y) * normalize(normal.xy) * 2.0;
     vec4 clip = u_matrix * vec4(position, 1.0);
     //clip.z += 0.1; //Bias, dirty hack but works (Prevents z buffer fighting between the front and back face)
     gl_Position = vec4(clip.xyz + vec3(clip.w * onePixel, 0.0), clip.w);
@@ -200,28 +200,28 @@ void main(void) {
   vec3 rgb2lum = vec3(0.30, 0.59, 0.11);
 
   float colorEdge =
-  -dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, -1)).xyz,rgb2lum)
+  //-dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, -1)).xyz,rgb2lum)
   -dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, 0)).xyz,rgb2lum)
-  -dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, 1)).xyz,rgb2lum)
+  //-dot(texture2D(u_texture, v_texcoord + onePixel * vec2(-1, 1)).xyz,rgb2lum)
   -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 0,-1)).xyz,rgb2lum)
   
   -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 0, 1)).xyz,rgb2lum)
-  -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 1,-1)).xyz,rgb2lum)
+  //-dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 1,-1)).xyz,rgb2lum)
   -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 0)).xyz,rgb2lum)
-  -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 1)).xyz,rgb2lum)
-  +dot(currColor.xyz,rgb2lum) * 8.0;
+ // -dot(texture2D(u_texture, v_texcoord + onePixel * vec2( 1, 1)).xyz,rgb2lum)
+  +dot(currColor.xyz,rgb2lum) * 4.0;
 
   vec3 v_normal = texture2D(u_normalsTex, v_texcoord).xyz;
   float normalsEdge =
-  -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2(-1, -1)).xyz,rgb2lum)
+  //-dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2(-1, -1)).xyz,rgb2lum)
   -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2(-1, 0)).xyz,rgb2lum)
-  -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2(-1, 1)).xyz,rgb2lum)
+  //-dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2(-1, 1)).xyz,rgb2lum)
   -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 0,-1)).xyz,rgb2lum)
   -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 0, 1)).xyz,rgb2lum)
-  -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 1,-1)).xyz,rgb2lum)
+  //-dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 1,-1)).xyz,rgb2lum)
   -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 1, 0)).xyz,rgb2lum)
-  -dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 1, 1)).xyz,rgb2lum)
-  +dot(v_normal,rgb2lum) * 8.0;
+  //-dot(texture2D(u_normalsTex, v_texcoord + onePixel * vec2( 1, 1)).xyz,rgb2lum)
+  +dot(v_normal,rgb2lum) * 4.0;
 
   float light = dot(v_normal * 2.0 - 1.0, normalize(u_light));
   float darkness = pow((1.0 - clamp(-colorEdge,0.0,1.0) - clamp(normalsEdge,0.1,1.0) + 0.1) * currColor.w,2.0);
@@ -275,7 +275,8 @@ void main(void) {
       gl_FragColor = vec4(src * 2.0 * light * darkness,  1.0);
     #else
     //desaturate(src * 2.0 * light,-0.4)
-      gl_FragColor = vec4(src * 2.0 * light,  darkness);
+      //gl_FragColor = vec4(src * 2.0 * light,  darkness);
+      gl_FragColor = vec4(desaturate(src * 2.0 * light,-0.2), darkness);
     #endif
   #endif
   
