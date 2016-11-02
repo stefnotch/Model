@@ -4,7 +4,6 @@ git push
 */
 
 /*global bones setUpPicker pickPixel animations */
-/*global Mat4 Quat DualQuat*/ //Math
 /*global normalsVShader normalsFShader*/
 /*global initSidebar rigging outlines*/
 
@@ -36,9 +35,14 @@ Triangles that make up the valleys are inside the model. (The ends of the spikes
 Don't switch shaders as often
 https://sourceforge.net/p/assimp/discussion/817654/thread/5462cbf5/
 
+Better menu: http://www.w3schools.com/howto/howto_js_sidenav.asp
+http://callmenick.com/post/slide-and-push-menus-with-css3-transitions
+http://callmenick.com/_development/slide-push-menus/
+http://www.w3schools.com/howto/howto_js_sidenav.asp
+http://www.w3schools.com/howto/tryit.asp?filename=tryhow_js_sidenav_push_opacity
+
+
 Normalize -> 32 bits (float) to 8 bits (0,1 range)
-Move Shaders somewhere else
-Matrix inverse
 
 Webgl 2:
 NPOT textures
@@ -51,12 +55,15 @@ Transform feedback
 Floating point textures
 */
 //Ok, that's so dirty.
-function require(){return null;}
-var glMatrix, quat2;
+function require() {
+  return null;
+}
+var glMatrix, quat2, mat4;
 var setUpRenderer;
-if(false){
+if (false) {
   glMatrix = require("./gl-matrix-min.js");
   quat2 = require("./glmatrix/quat2.js");
+  mat4 = require("./glmatrix/mat4.js");
   setUpRenderer = require("./framebuffers.js");
 }
 
@@ -72,7 +79,8 @@ var pos = [-0.12583708965284524, 2.9979705362177205, 1.3783995901996082],
 //Rotation
 var pitch = 5,
   yaw = 0;
-var pitchVel = 0, yawVel = 0;
+var pitchVel = 0,
+  yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
@@ -163,6 +171,10 @@ function start() {
   }
 }
 
+var modelMat = mat4.create(),
+  viewMat = mat4.create(),
+  projectionMat = mat4.create(),
+  mouseProjectionMat = mat4.create();
 
 /**
  * Draw loop
@@ -173,24 +185,37 @@ function redraw() {
   pos[2] += velocity[2] * speed;
   pitch += pitchVel;
   yaw += yawVel;
-  
-  var modelMat = Mat4.multiply(Mat4.rotX(pitch), Mat4.rotY(yaw));
-  modelMat = Mat4.multiply(modelMat, Mat4.translation(pos[0], pos[1], pos[2]));
-  var viewMat = Mat4.makeInverseCrap(modelMat);
 
+  //Note to self: Matrix multiplication order is weird.
+  //Model mat
+  //Translation
+  mat4.fromTranslation(modelMat, pos);
+  //Rotation
+  mat4.rotateY(modelMat, modelMat, glMatrix.toRadian(yaw));
+  mat4.rotateX(modelMat, modelMat, glMatrix.toRadian(pitch));
 
-  //Projection matrix => Mat4.makePerspective
-  var matrix = Mat4.multiply(viewMat, Mat4.makePerspective(1, glcanvas.clientWidth / glcanvas.clientHeight, 0.5, 200));
+  //View mat
+  mat4.invert(viewMat, modelMat);
+  //Projection mat
+  mat4.multiply(projectionMat, mat4.perspective(projectionMat, Math.PI / 4, glcanvas.clientWidth / glcanvas.clientHeight, 0.1, 2000),
+    viewMat);
 
   var boneMat = calculateBones();
   if (mouse.clicked) {
     //mouse.X / glcanvas.clientWidth;
     //-mouse.Y / glcanvas.clientHeight;
-    pickerFramebuffer.pickPixel(objectsToDraw,
-      Mat4.multiply(matrix,
+    mat4.fromTranslation(mouseProjectionMat, [-mouse.X / glcanvas.clientWidth * 2,
+      (1 - mouse.Y / glcanvas.clientHeight) * -2,
+      0
+    ]);
+    mat4.multiply(mouseProjectionMat, mouseProjectionMat, projectionMat);
+    pickerFramebuffer.pickPixel(objectsToDraw, mouseProjectionMat, boneMat);
+    /*pickerFramebuffer.pickPixel(objectsToDraw,
+      Mat4.multiply(projectionMat,
         Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, (1 - mouse.Y / glcanvas.clientHeight) * -2, 0)
       ), boneMat);
-      
+    */
+    
     /*
     sidebarStupidFirefox.style.backgroundColor = `rgba(${pickerFramebuffer.pixel[0]},
     ${pickerFramebuffer.pixel[1]},
@@ -198,9 +223,9 @@ function redraw() {
     console.log(`rgba(${pickerFramebuffer.pixel[0]},
     ${pickerFramebuffer.pixel[1]},
     ${pickerFramebuffer.pixel[2]},255)`);*/
-    if(pickerFramebuffer.pixel[0] == 255){
+    if (pickerFramebuffer.pixel[0] == 255) {
       displayText.value = "Nu bones to see here";
-    } else  {
+    } else {
       displayText.value = bones[pickerFramebuffer.pixel[0]].name;
       //TODO
       //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
@@ -210,8 +235,8 @@ function redraw() {
     mouse.clicked = false;
   }
   //depthRenderer.render(objectsToDraw, matrix, boneMat);
-  normalsRenderer.render(objectsToDraw, matrix, boneMat);
-  mainRenderer.render(objectsToDraw, matrix, boneMat);
+  normalsRenderer.render(objectsToDraw, projectionMat, boneMat);
+  mainRenderer.render(objectsToDraw, projectionMat, boneMat);
   postProcessOutline.render(postProcessObj, mainRenderer.tex, normalsRenderer.tex);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); //Canvas again
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -285,7 +310,7 @@ function animationStep(animationName) {
 function calculateBones() {
   //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
-    
+
     //Normalize the quaternions
     quat2.normalize(bones[i].dq, bones[i].dq);
     //bones[i].dq.normalize();
@@ -308,8 +333,8 @@ function calculateBones() {
     }
     //Flatten it for OpenGL
     var tempBone = quat2.create();
-    quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose); //.toMat4();
-  
+    quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
+
     //TODO: WXYZ
     boneArray[i * 8] = tempBone[0][3];
     boneArray[i * 8 + 1] = tempBone[0][0];
@@ -320,7 +345,7 @@ function calculateBones() {
     boneArray[i * 8 + 4 + 2] = tempBone[1][1];
     boneArray[i * 8 + 4 + 3] = tempBone[1][2];
   }
-  return boneArray; 
+  return boneArray;
 }
 
 /**
@@ -775,8 +800,8 @@ function handleDragOver(evt) {
 }
 
 function keyboardHandlerDown(keyboardEvent) {
-  
-  var yawRad = glMatrix.toRadian(yaw); ;
+
+  var yawRad = glMatrix.toRadian(yaw);;
 
   var pitchRad = glMatrix.toRadian(pitch);
   switch (keyboardEvent.code) {
@@ -795,16 +820,16 @@ function keyboardHandlerDown(keyboardEvent) {
     case "KeyA":
     case "ArrowLeft":
       //yawVel = 1;
-      velocity[0] = -Math.sin(yawRad + Math.PI/2) * Math.cos(pitchRad);
+      velocity[0] = -Math.sin(yawRad + Math.PI / 2) * Math.cos(pitchRad);
       velocity[1] = Math.sin(pitchRad);
-      velocity[2] = -Math.cos(yawRad + Math.PI/2) * Math.cos(pitchRad);
+      velocity[2] = -Math.cos(yawRad + Math.PI / 2) * Math.cos(pitchRad);
       break;
     case "KeyD":
     case "ArrowRight":
       //yawVel = -1;
-      velocity[0] = -Math.sin(yawRad - Math.PI/2) * Math.cos(pitchRad);
+      velocity[0] = -Math.sin(yawRad - Math.PI / 2) * Math.cos(pitchRad);
       velocity[1] = Math.sin(pitchRad);
-      velocity[2] = -Math.cos(yawRad - Math.PI/2) * Math.cos(pitchRad);
+      velocity[2] = -Math.cos(yawRad - Math.PI / 2) * Math.cos(pitchRad);
       break;
   }
 }
