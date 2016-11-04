@@ -8,7 +8,7 @@ var colorFXAA = true;
 function initSidebar() {
     var options = sidebarStupidFirefox.getElementsByTagName("button");
     for (var i = 0; i < options.length; i++) {
-        if (options[i].className == "icon") {
+        if (options[i].id == "toggle") {
             options[i].addEventListener("click", event => {
                 if (event.target.parentNode.style.transform != "translateX(0%)") {
                     event.target.parentNode.style.transform = "translateX(0%)";

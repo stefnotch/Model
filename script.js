@@ -35,11 +35,12 @@ Triangles that make up the valleys are inside the model. (The ends of the spikes
 Don't switch shaders as often
 https://sourceforge.net/p/assimp/discussion/817654/thread/5462cbf5/
 
-Better menu: http://www.w3schools.com/howto/howto_js_sidenav.asp
+Better menu: http://tympanus.net/codrops/2013/04/17/slide-and-push-menus/
 http://callmenick.com/post/slide-and-push-menus-with-css3-transitions
 http://callmenick.com/_development/slide-push-menus/
 http://www.w3schools.com/howto/howto_js_sidenav.asp
 http://www.w3schools.com/howto/tryit.asp?filename=tryhow_js_sidenav_push_opacity
+https://jsbin.com/hodemi/edit?html,css,output
 
 
 Normalize -> 32 bits (float) to 8 bits (0,1 range)
