@@ -3,7 +3,7 @@ git commit -am "your message goes here"
 git push
 */
 
-/*global bones setUpPicker pickPixel animations */
+/*global bones pickPixel animations */
 /*global normalsVShader normalsFShader*/
 /*global initSidebar rigging outlines*/
 
@@ -35,14 +35,6 @@ Triangles that make up the valleys are inside the model. (The ends of the spikes
 Don't switch shaders as often
 https://sourceforge.net/p/assimp/discussion/817654/thread/5462cbf5/
 
-Better menu: http://tympanus.net/codrops/2013/04/17/slide-and-push-menus/
-http://callmenick.com/post/slide-and-push-menus-with-css3-transitions
-http://callmenick.com/_development/slide-push-menus/
-http://www.w3schools.com/howto/howto_js_sidenav.asp
-http://www.w3schools.com/howto/tryit.asp?filename=tryhow_js_sidenav_push_opacity
-https://jsbin.com/hodemi/edit?html,css,output
-
-
 Normalize -> 32 bits (float) to 8 bits (0,1 range)
 
 Webgl 2:
@@ -55,6 +47,10 @@ Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
 Transform feedback
 Floating point textures
 */
+//Fetch progress
+//https://jakearchibald.com/2015/thats-so-fetch/
+//http://stackoverflow.com/questions/35711724/progress-indicators-for-fetch (last post)
+
 //Ok, that's so dirty.
 function require() {
   return null;
@@ -89,8 +85,14 @@ var boneArray;
 
 var normalsRenderer;
 var mainRenderer;
+
+/**
+ * If the mouse selected anything, it will be a value >= 0 otherwise -1
+ */
 var mouse = {
   clicked: false,
+  pressed: false,
+  selected: -1,
   X: 0,
   Y: 0
 };
@@ -177,6 +179,10 @@ var modelMat = mat4.create(),
   projectionMat = mat4.create(),
   mouseProjectionMat = mat4.create();
 
+var r = 0,
+  oldMouseX, oldMouseY;
+  var oldRotAroundTest = quat2.create();
+  var offRot = 0;
 /**
  * Draw loop
  */
@@ -200,41 +206,129 @@ function redraw() {
   //Projection mat
   mat4.multiply(projectionMat, mat4.perspective(projectionMat, Math.PI / 4, glcanvas.clientWidth / glcanvas.clientHeight, 0.1, 2000),
     viewMat);
-
   var boneMat = calculateBones();
-  if (mouse.clicked) {
-    //mouse.X / glcanvas.clientWidth;
-    //-mouse.Y / glcanvas.clientHeight;
-    mat4.fromTranslation(mouseProjectionMat, [-mouse.X / glcanvas.clientWidth * 2,
-      (1 - mouse.Y / glcanvas.clientHeight) * -2,
-      0
-    ]);
-    mat4.multiply(mouseProjectionMat, mouseProjectionMat, projectionMat);
-    pickerFramebuffer.pickPixel(objectsToDraw, mouseProjectionMat, boneMat);
-    /*pickerFramebuffer.pickPixel(objectsToDraw,
-      Mat4.multiply(projectionMat,
-        Mat4.translation(-mouse.X / glcanvas.clientWidth * 2, (1 - mouse.Y / glcanvas.clientHeight) * -2, 0)
-      ), boneMat);
-    */
-    
+  
     /*
-    sidebarStupidFirefox.style.backgroundColor = `rgba(${pickerFramebuffer.pixel[0]},
-    ${pickerFramebuffer.pixel[1]},
-    ${pickerFramebuffer.pixel[2]},255)`;
-    console.log(`rgba(${pickerFramebuffer.pixel[0]},
-    ${pickerFramebuffer.pixel[1]},
-    ${pickerFramebuffer.pixel[2]},255)`);*/
-    if (pickerFramebuffer.pixel[0] == 255) {
-      displayText.value = "Nu bones to see here";
-    } else {
-      displayText.value = bones[pickerFramebuffer.pixel[0]].name;
-      //TODO
-      //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
-      //http://www.songho.ca/opengl/files/gl_transform02.png
-      //bones[pickerFramebuffer.pixel[0]].worldDualQuat.getTranslation()
-    }
+    var b = 0;
+    var t = vec3.create();
+    quat2.getTranslation(t, bones[b].dq);
+    vec3.scale(t, t, -1);
+    quat2.translate(bones[b].dq, bones[b].dq, t);
+    quat2.getTranslation(t, bones[b+1].dq);
+    vec3.scale(t, t, -1);
+    quat2.translate(bones[b+1].dq, bones[b+1].dq, t);
+    quat2.translate(bones[b+1].dq, bones[b+1].dq, rotAround);*/
+
+    //
+    
+  if (mouse.clicked) {
+
     mouse.clicked = false;
   }
+
+  if (mouse.pressed) {
+    if (mouse.selected == -1) {
+      //mouse.X / glcanvas.clientWidth;
+      //-mouse.Y / glcanvas.clientHeight;
+      mat4.fromTranslation(mouseProjectionMat, [-mouse.X / glcanvas.clientWidth * 2,
+        (1 - mouse.Y / glcanvas.clientHeight) * -2,
+        0
+      ]);
+      mat4.multiply(mouseProjectionMat, mouseProjectionMat, projectionMat);
+      pickerFramebuffer.pickPixel(objectsToDraw, mouseProjectionMat, boneMat);
+
+      //console.log(`rgba(${pickerFramebuffer.pixel[0]}`);
+      if (pickerFramebuffer.pixel[0] == 255) {
+        displayText.value = "Nu bones to see here";
+      } else {
+        displayText.value = bones[pickerFramebuffer.pixel[0]].name;
+        displayText.style.backgroundColor = "red";
+        mouse.selected = pickerFramebuffer.pixel[0];
+        oldMouseX = mouse.X;
+        oldMouseY = mouse.Y;
+
+        //bones[pickerFramebuffer.pixel[0]].dq
+
+        //r += Math.PI / 16;
+        //TODO
+        //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
+        //http://www.songho.ca/opengl/files/gl_transform02.png
+        //bones[pickerFramebuffer.pixel[0]].worldDualQuat.getTranslation()
+      }
+    } else {
+      offRot+=0.001;
+      var mouseVec = vec2.create();
+      mouseVec[0] = oldMouseX - mouse.X;
+      mouseVec[1] =  oldMouseY - mouse.Y;
+      vec2.normalize(mouseVec, mouseVec);
+
+      var oldRot = r;
+      r = Math.atan2(mouseVec[0], mouseVec[1]);
+      if(mouseVec[0] == 0 || mouseVec[1] == 0) {r=oldRot;}
+      
+      
+      var pitchRad = glMatrix.toRadian(pitch);
+      var yawRad = glMatrix.toRadian(yaw);
+      
+      var m = mat4.create();
+      mat4.fromXRotation(m, pitchRad);
+      mat4.rotateY(m, m, yawRad);
+      
+      var tempQuat2= quat2.create();
+      quat2.fromMat4(tempQuat2, m);
+      //Rotate around the cam vector
+
+      
+      var rotAround = vec3.create();
+      vec3.fromRotation(rotAround, pitchRad, yawRad);
+      vec3.scale(rotAround, rotAround, -1);
+      //NaN v
+      //vec3.rotateX(rotAround, rotAround, pitchRad);
+      //vec3.rotateY(rotAround, rotAround, yawRad);
+      //To the dq's coordinate system
+      if(bones[mouse.selected].parent != -1) {
+        //If I want to transform the root, I have to use the "base" coordinate system....
+        //vec3.transmat...
+        
+        
+        //quat2.multiply(tempQuat2, tempQuat2, bones[bones[mouse.selected].parent].worldDualQuat);
+        //vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+      }
+      
+      /*[
+          Math.sin(yawRad) * Math.cos(pitchRad),
+          -Math.sin(pitchRad),
+          Math.cos(yawRad) * Math.cos(pitchRad)
+        ]*/
+      /*quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
+        rotAround,
+        (oldRot - r)
+      );*/
+      
+      /*
+      var t = vec3.create();
+      quat2.getTranslation(t, bones[mouse.selected].dq);
+      
+      quat2.fromRotation(bones[mouse.selected].dq, tempQuat2[0]);
+      quat2.translate(bones[mouse.selected].dq, bones[mouse.selected].dq, t);
+      
+      */
+      
+     /* var rotAroundQuat = quat.create();
+      quat.copy(rotAroundQuat, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+      quat.setAxisAngle(rotAroundQuat,  , 0.1);
+      quat.normalize(rotAroundQuat, rotAroundQuat);
+      quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, rotAroundQuat);
+      */
+      //quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, (oldRot - r));
+    }
+  } else {
+    displayText.style.backgroundColor = "white";
+    mouse.selected = -1;
+  }
+  
+  
+  //boneMat = calculateBones();
   //depthRenderer.render(objectsToDraw, matrix, boneMat);
   normalsRenderer.render(objectsToDraw, projectionMat, boneMat);
   mainRenderer.render(objectsToDraw, projectionMat, boneMat);
@@ -252,12 +346,6 @@ function redraw() {
   vaoExt.bindVertexArrayOES(postProcessObj.vao);
   //Draw the object
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, postProcessObj.bufferLength);
-
-
-
-  //
-
-  //lightRot[0] = pitch;
 
   //Draw transparent objects
 
@@ -308,6 +396,7 @@ function animationStep(animationName) {
   return false;
 }
 
+var rotAround = vec3.create();
 function calculateBones() {
   //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
@@ -316,6 +405,8 @@ function calculateBones() {
     quat2.normalize(bones[i].dq, bones[i].dq);
     //bones[i].dq.normalize();
     var localDualQuat = quat2.clone(bones[i].dq);
+    
+    
     /* Mat4.multiply(
           Quat.toMat4(bones[i].qRot),
           Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
@@ -332,11 +423,50 @@ function calculateBones() {
       //Chain the bones together
       quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
     }
+    //Which one is correct?
+    //What does the inverse bindpose do again?
+    
+    var pitchRad = glMatrix.toRadian(pitch);
+    var yawRad = glMatrix.toRadian(yaw);
+    
+    //vec3.fromRotation(rotAround, pitchRad, yawRad);
+    //rotAround[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
+    //rotAround[1] = Math.cos(yawRad) * Math.cos(pitchRad);
+    //rotAround[2] = Math.sin(pitchRad);
+    //vec3.scale(rotAround, rotAround, -1 * offRot);
+    //vec3.normalize(rotAround, rotAround);
+    //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
+    //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, [0, 1, 0], offRot);
+    //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, offRot);
+
+         
+    if(i == mouse.selected){
+      var mouseVec = vec2.create();
+      mouseVec[0] = oldMouseX - mouse.X;
+      mouseVec[1] =  oldMouseY - mouse.Y;
+      vec2.normalize(mouseVec, mouseVec);
+
+      var oldRot = r;
+      r = Math.atan2(mouseVec[0], mouseVec[1]);
+      
+      //vec3.transformQuat(rotAround, rotAround, bones[i].worldDualQuat[0]);
+      quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
+      //quat2.rotateX(bones[i].worldDualQuat, bones[i].worldDualQuat, r);
+      //Not exactly correct...
+      //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
+      //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
+    }
+    
+    quat2.normalize(bones[i].worldDualQuat,bones[i].worldDualQuat);
+    
     //Flatten it for OpenGL
     var tempBone = quat2.create();
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
+    //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
+    
+    //Now the bones are all equal to the root bone (Because of the inverse bindpose)
 
-    //TODO: WXYZ
+    //To WXYZ
     boneArray[i * 8] = tempBone[0][3];
     boneArray[i * 8 + 1] = tempBone[0][0];
     boneArray[i * 8 + 2] = tempBone[0][1];
@@ -595,9 +725,6 @@ function loadModelFile(url, texUrl, shaderProgram) {
     method: "get"
   }).then((response) => {
     if (response.status === 200) {
-      //response.arrayBuffer().then((hi) => {
-      //  console.log(hi[0]);
-      //});
       return response.arrayBuffer().then((arrayBuffer) => {
         var charByte = 1;
         var floatByte = 4,
@@ -675,6 +802,12 @@ function initCanvas(canvasName) {
   window.addEventListener("keyup", keyboardHandlerUp);
   window.addEventListener("wheel", scrollHandler);
   glcanvas.addEventListener("mousemove", mouseHandler);
+  glcanvas.addEventListener("mousedown", (e) => {
+    mouse.pressed = true;
+  });
+  glcanvas.addEventListener("mouseup", (e) => {
+    mouse.pressed = false;
+  });
   //TODO https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events
   glcanvas.addEventListener("touchstart", touchHandlerStart);
   glcanvas.addEventListener("touchmove", touchHandlerMove);
@@ -808,9 +941,9 @@ function keyboardHandlerDown(keyboardEvent) {
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
-      velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
-      velocity[1] = Math.sin(pitchRad);
-      velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
+    velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
+    velocity[1] = Math.sin(pitchRad);
+    velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
       break;
     case "KeyS":
     case "ArrowDown":
@@ -874,6 +1007,8 @@ function mouseHandler(mouseEvent) {
     yaw -= mouseEvent.movementX / 10;
     pitch -= mouseEvent.movementY / 10;
   }
+  mouse.X = mouseEvent.offsetX;
+  mouse.Y = mouseEvent.offsetY;
 }
 
 function mouseClickHandler(mouseEvent) {
