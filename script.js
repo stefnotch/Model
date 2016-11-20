@@ -55,12 +55,13 @@ Floating point textures
 function require() {
   return null;
 }
-var glMatrix, quat2, mat4;
+var glMatrix, quat2, mat4, vec3;
 var setUpRenderer;
 if (false) {
   glMatrix = require("./gl-matrix-min.js");
   quat2 = require("./glmatrix/quat2.js");
   mat4 = require("./glmatrix/mat4.js");
+  vec3 = require("./glmatrix/vec3.js");
   setUpRenderer = require("./framebuffers.js");
 }
 
@@ -82,6 +83,7 @@ var lightRot = [1, -0.5, -0.3];
 
 var objectsToDraw = [];
 var boneArray;
+var boneMat;
 
 var normalsRenderer;
 var mainRenderer;
@@ -138,6 +140,7 @@ function start() {
     });
 
     setUpBones();
+    boneMat = calculateBones();
     //depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
     //setUpPicker();
     pickerFramebuffer = new pixelPicker(pickPixel);
@@ -181,8 +184,6 @@ var modelMat = mat4.create(),
 
 var r = 0,
   oldMouseX, oldMouseY;
-  var oldRotAroundTest = quat2.create();
-  var offRot = 0;
 /**
  * Draw loop
  */
@@ -206,8 +207,6 @@ function redraw() {
   //Projection mat
   mat4.multiply(projectionMat, mat4.perspective(projectionMat, Math.PI / 4, glcanvas.clientWidth / glcanvas.clientHeight, 0.1, 2000),
     viewMat);
-  var boneMat = calculateBones();
-  
     /*
     var b = 0;
     var t = vec3.create();
@@ -256,71 +255,41 @@ function redraw() {
         //bones[pickerFramebuffer.pixel[0]].worldDualQuat.getTranslation()
       }
     } else {
-      offRot+=0.001;
       var mouseVec = vec2.create();
       mouseVec[0] = oldMouseX - mouse.X;
       mouseVec[1] =  oldMouseY - mouse.Y;
-      vec2.normalize(mouseVec, mouseVec);
 
       var oldRot = r;
       r = Math.atan2(mouseVec[0], mouseVec[1]);
-      if(mouseVec[0] == 0 || mouseVec[1] == 0) {r=oldRot;}
-      
-      
       var pitchRad = glMatrix.toRadian(pitch);
       var yawRad = glMatrix.toRadian(yaw);
-      
-      var m = mat4.create();
-      mat4.fromXRotation(m, pitchRad);
-      mat4.rotateY(m, m, yawRad);
-      
-      var tempQuat2= quat2.create();
-      quat2.fromMat4(tempQuat2, m);
+
       //Rotate around the cam vector
 
-      
       var rotAround = vec3.create();
-      vec3.fromRotation(rotAround, pitchRad, yawRad);
-      vec3.scale(rotAround, rotAround, -1);
-      //NaN v
-      //vec3.rotateX(rotAround, rotAround, pitchRad);
-      //vec3.rotateY(rotAround, rotAround, yawRad);
+      rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
+      rotAround[1] = -Math.sin(pitchRad);
+      rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
+      //vec3.fromRotation(rotAround, pitchRad, yawRad);
+      //vec3.scale(rotAround, rotAround, -1);
       //To the dq's coordinate system
-      if(bones[mouse.selected].parent != -1) {
-        //If I want to transform the root, I have to use the "base" coordinate system....
-        //vec3.transmat...
-        
-        
-        //quat2.multiply(tempQuat2, tempQuat2, bones[bones[mouse.selected].parent].worldDualQuat);
-        //vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
-      }
+      
+      if(bones[mouse.selected].parent!=-1)
+      vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
       
       /*[
           Math.sin(yawRad) * Math.cos(pitchRad),
           -Math.sin(pitchRad),
           Math.cos(yawRad) * Math.cos(pitchRad)
         ]*/
-      /*quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
+        
+      
+      quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
         rotAround,
         (oldRot - r)
-      );*/
+      );
       
-      /*
-      var t = vec3.create();
-      quat2.getTranslation(t, bones[mouse.selected].dq);
       
-      quat2.fromRotation(bones[mouse.selected].dq, tempQuat2[0]);
-      quat2.translate(bones[mouse.selected].dq, bones[mouse.selected].dq, t);
-      
-      */
-      
-     /* var rotAroundQuat = quat.create();
-      quat.copy(rotAroundQuat, bones[bones[mouse.selected].parent].worldDualQuat[0]);
-      quat.setAxisAngle(rotAroundQuat,  , 0.1);
-      quat.normalize(rotAroundQuat, rotAroundQuat);
-      quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, rotAroundQuat);
-      */
-      //quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, (oldRot - r));
     }
   } else {
     displayText.style.backgroundColor = "white";
@@ -328,7 +297,7 @@ function redraw() {
   }
   
   
-  //boneMat = calculateBones();
+  boneMat = calculateBones();
   //depthRenderer.render(objectsToDraw, matrix, boneMat);
   normalsRenderer.render(objectsToDraw, projectionMat, boneMat);
   mainRenderer.render(objectsToDraw, projectionMat, boneMat);
@@ -439,7 +408,7 @@ function calculateBones() {
     //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, [0, 1, 0], offRot);
     //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, offRot);
 
-         
+ /*        
     if(i == mouse.selected){
       var mouseVec = vec2.create();
       mouseVec[0] = oldMouseX - mouse.X;
@@ -458,7 +427,7 @@ function calculateBones() {
     }
     
     quat2.normalize(bones[i].worldDualQuat,bones[i].worldDualQuat);
-    
+    */
     //Flatten it for OpenGL
     var tempBone = quat2.create();
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
