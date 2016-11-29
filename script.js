@@ -47,43 +47,7 @@ Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
 Transform feedback
 Floating point textures
 
-
-
-function tq2(a, q)
-{
-   var qx = q[0], qy = q[1], qz = q[2], s = q[3];
-   var x = a[0], y = a[1], z = a[2];
-   // Extract the vector part of the quaternion
-   //Vector3 u(q.x, q.y, q.z);
-   //const Vector3& v, const Quaternion& q, 
-      
-   var one = 2 * (qx * x + qy * y + qz * z);
-   var two = s * s - (qx * qx + qy * qy + qz * qz);
-   var three = 2 * s;
-   
-   // cx = ay * bz − az * by
-   // cy = az * bx − ax * bz
-   // cz = ax * by − ay * bx	
-   var crossX = qy * z - qz * y;
-   var crossY = qz * x - qx * z;
-   var crossZ = qx * y - qy * x;
-    return [
-      one * qx + two * x + three * crossX,
-      one * qy + two * y + three * crossY,
-      one * qz + two * z + three * crossZ
-      //2.0f * dot(u, v) * u
-      //    + (s*s - dot(u, u)) * v
-      //    + 2.0f * s * cross(u, v)
-    ];
-    // Do the math
-    //vprime = 2.0f * dot(u, v) * u
-    //      + (s*s - dot(u, u)) * v
-    //      + 2.0f * s * cross(u, v);
-}
-
 */
-
-//Change the figure to lucario (or any rigged pokemon)
 
 //Fetch progress
 //https://jakearchibald.com/2015/thats-so-fetch/
@@ -93,11 +57,12 @@ function tq2(a, q)
 function require() {
   return null;
 }
-var glMatrix, quat2, mat4, vec3;
+var glMatrix, quat2, quat, mat4, vec3;
 var setUpRenderer;
 if (false) {
   glMatrix = require("./gl-matrix-min.js");
   quat2 = require("./glmatrix/quat2.js");
+  quat = require("./glmatrix/quat.js");
   mat4 = require("./glmatrix/mat4.js");
   vec3 = require("./glmatrix/vec3.js");
   setUpRenderer = require("./framebuffers.js");
@@ -222,6 +187,9 @@ var modelMat = mat4.create(),
 
 var r = 0,
   oldMouseX, oldMouseY;
+
+  
+var inverseLookAt;
 /**
  * Draw loop
  */
@@ -283,10 +251,21 @@ function redraw() {
         mouse.selected = pickerFramebuffer.pixel[0];
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
+        
+        var pitchRad = glMatrix.toRadian(pitch);
+        var yawRad = glMatrix.toRadian(yaw);
 
-        //bones[pickerFramebuffer.pixel[0]].dq
+        var lookAt = quat.create();
+        quat.rotateX(lookAt, lookAt, pitchRad);
+        quat.rotateY(lookAt, lookAt, yawRad);
 
-        //r += Math.PI / 16;
+        quat.normalize(lookAt, lookAt);
+        
+        quat.multiply(lookAt, lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+        
+        inverseLookAt = quat.clone(lookAt);
+        quat.conjugate(inverseLookAt, inverseLookAt);
+        currentDQ = quat2.clone(bones[mouse.selected].dq);
         //TODO
         //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
         //http://www.songho.ca/opengl/files/gl_transform02.png
@@ -304,6 +283,7 @@ function redraw() {
 
       //Rotate around the cam vector
       if (rotAroundCam) {
+        if(false) { //backup
         var rotAround = vec3.create();
         rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
         rotAround[1] = -Math.sin(pitchRad);
@@ -324,6 +304,19 @@ function redraw() {
         quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
           rotAround, -(oldRot - r)
         );
+        }
+        
+        var lookAt = quat.create();
+        quat.rotateX(lookAt, lookAt, pitchRad);
+        quat.rotateY(lookAt, lookAt, yawRad);
+        quat.normalize(lookAt, lookAt);
+        quat.multiply(lookAt, lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+        
+        var product = quat.create();
+        
+        quat.multiply(product, lookAt, inverseLookAt);
+        
+        quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, product);
       } else {
         quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, -(oldRot - r));
       }
@@ -943,9 +936,9 @@ function handleDragOver(evt) {
 
 function keyboardHandlerDown(keyboardEvent) {
 
-  var yawRad = glMatrix.toRadian(yaw);;
-
+  var yawRad = glMatrix.toRadian(yaw);
   var pitchRad = glMatrix.toRadian(pitch);
+  
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
@@ -961,17 +954,19 @@ function keyboardHandlerDown(keyboardEvent) {
       break;
     case "KeyA":
     case "ArrowLeft":
+      pitchRad = 0;
       //yawVel = 1;
-      velocity[0] = -Math.sin(yawRad + Math.PI / 2) * Math.cos(pitchRad);
-      velocity[1] = Math.sin(pitchRad);
-      velocity[2] = -Math.cos(yawRad + Math.PI / 2) * Math.cos(pitchRad);
+      velocity[0] = -Math.sin(yawRad + Math.PI / 2);
+      velocity[1] = 0;
+      velocity[2] = -Math.cos(yawRad + Math.PI / 2);
       break;
     case "KeyD":
     case "ArrowRight":
+      pitchRad = 0;
       //yawVel = -1;
-      velocity[0] = -Math.sin(yawRad - Math.PI / 2) * Math.cos(pitchRad);
-      velocity[1] = Math.sin(pitchRad);
-      velocity[2] = -Math.cos(yawRad - Math.PI / 2) * Math.cos(pitchRad);
+      velocity[0] = -Math.sin(yawRad - Math.PI / 2);
+      velocity[1] = 0;
+      velocity[2] = -Math.cos(yawRad - Math.PI / 2);
       break;
   }
 }
