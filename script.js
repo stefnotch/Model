@@ -46,7 +46,45 @@ Multiple Render Targets!!! (Render to multiple textures!!) -> Normals pass
 3D textures (For water and such!)
 Transform feedback
 Floating point textures
+
+
+
+function tq2(a, q)
+{
+   var qx = q[0], qy = q[1], qz = q[2], s = q[3];
+   var x = a[0], y = a[1], z = a[2];
+   // Extract the vector part of the quaternion
+   //Vector3 u(q.x, q.y, q.z);
+   //const Vector3& v, const Quaternion& q, 
+      
+   var one = 2 * (qx * x + qy * y + qz * z);
+   var two = s * s - (qx * qx + qy * qy + qz * qz);
+   var three = 2 * s;
+   
+   // cx = ay * bz − az * by
+   // cy = az * bx − ax * bz
+   // cz = ax * by − ay * bx	
+   var crossX = qy * z - qz * y;
+   var crossY = qz * x - qx * z;
+   var crossZ = qx * y - qy * x;
+    return [
+      one * qx + two * x + three * crossX,
+      one * qy + two * y + three * crossY,
+      one * qz + two * z + three * crossZ
+      //2.0f * dot(u, v) * u
+      //    + (s*s - dot(u, u)) * v
+      //    + 2.0f * s * cross(u, v)
+    ];
+    // Do the math
+    //vprime = 2.0f * dot(u, v) * u
+    //      + (s*s - dot(u, u)) * v
+    //      + 2.0f * s * cross(u, v);
+}
+
 */
+
+//Change the figure to lucario (or any rigged pokemon)
+
 //Fetch progress
 //https://jakearchibald.com/2015/thats-so-fetch/
 //http://stackoverflow.com/questions/35711724/progress-indicators-for-fetch (last post)
@@ -129,7 +167,7 @@ function start() {
     var shaderProgram = new ShaderProg(vertexShader, fragmentShader); //eslint-disable-line
 
     Promise.all([
-      loadModelFile("Model/cat/output.modelfile", "Model/cat", shaderProgram)
+      loadModelFile("Model/lucario/output.modelfile", "Model/lucario", shaderProgram)
     ]).then((stuff) => {
       //DO SOMETHING
       glcanvas.style.backgroundColor = "white";
@@ -207,19 +245,19 @@ function redraw() {
   //Projection mat
   mat4.multiply(projectionMat, mat4.perspective(projectionMat, Math.PI / 4, glcanvas.clientWidth / glcanvas.clientHeight, 0.1, 2000),
     viewMat);
-    /*
-    var b = 0;
-    var t = vec3.create();
-    quat2.getTranslation(t, bones[b].dq);
-    vec3.scale(t, t, -1);
-    quat2.translate(bones[b].dq, bones[b].dq, t);
-    quat2.getTranslation(t, bones[b+1].dq);
-    vec3.scale(t, t, -1);
-    quat2.translate(bones[b+1].dq, bones[b+1].dq, t);
-    quat2.translate(bones[b+1].dq, bones[b+1].dq, rotAround);*/
+  /*
+  var b = 0;
+  var t = vec3.create();
+  quat2.getTranslation(t, bones[b].dq);
+  vec3.scale(t, t, -1);
+  quat2.translate(bones[b].dq, bones[b].dq, t);
+  quat2.getTranslation(t, bones[b+1].dq);
+  vec3.scale(t, t, -1);
+  quat2.translate(bones[b+1].dq, bones[b+1].dq, t);
+  quat2.translate(bones[b+1].dq, bones[b+1].dq, rotAround);*/
 
-    //
-    
+  //
+
   if (mouse.clicked) {
 
     mouse.clicked = false;
@@ -257,7 +295,7 @@ function redraw() {
     } else {
       var mouseVec = vec2.create();
       mouseVec[0] = oldMouseX - mouse.X;
-      mouseVec[1] =  oldMouseY - mouse.Y;
+      mouseVec[1] = oldMouseY - mouse.Y;
 
       var oldRot = r;
       r = Math.atan2(mouseVec[0], mouseVec[1]);
@@ -265,38 +303,37 @@ function redraw() {
       var yawRad = glMatrix.toRadian(yaw);
 
       //Rotate around the cam vector
+      if (rotAroundCam) {
+        var rotAround = vec3.create();
+        rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
+        rotAround[1] = -Math.sin(pitchRad);
+        rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
+        //vec3.fromRotation(rotAround, pitchRad, yawRad);
+        //vec3.scale(rotAround, rotAround, -1);
+        //To the dq's coordinate system
 
-      var rotAround = vec3.create();
-      rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
-      rotAround[1] = -Math.sin(pitchRad);
-      rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
-      //vec3.fromRotation(rotAround, pitchRad, yawRad);
-      //vec3.scale(rotAround, rotAround, -1);
-      //To the dq's coordinate system
-      
-      if(bones[mouse.selected].parent!=-1)
-      vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
-      
-      /*[
-          Math.sin(yawRad) * Math.cos(pitchRad),
-          -Math.sin(pitchRad),
-          Math.cos(yawRad) * Math.cos(pitchRad)
-        ]*/
-        
-      
-      quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
-        rotAround,
-        (oldRot - r)
-      );
-      
-      
+        if (bones[mouse.selected].parent != -1)
+          vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+
+        /*[
+            Math.sin(yawRad) * Math.cos(pitchRad),
+            -Math.sin(pitchRad),
+            Math.cos(yawRad) * Math.cos(pitchRad)
+          ]*/
+
+        quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
+          rotAround, -(oldRot - r)
+        );
+      } else {
+        quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, -(oldRot - r));
+      }
     }
   } else {
     displayText.style.backgroundColor = "white";
     mouse.selected = -1;
   }
-  
-  
+
+
   boneMat = calculateBones();
   //depthRenderer.render(objectsToDraw, matrix, boneMat);
   normalsRenderer.render(objectsToDraw, projectionMat, boneMat);
@@ -366,6 +403,7 @@ function animationStep(animationName) {
 }
 
 var rotAround = vec3.create();
+
 function calculateBones() {
   //animationStep(animationName);
   for (var i = 0; i < bones.length; i++) {
@@ -374,8 +412,8 @@ function calculateBones() {
     quat2.normalize(bones[i].dq, bones[i].dq);
     //bones[i].dq.normalize();
     var localDualQuat = quat2.clone(bones[i].dq);
-    
-    
+
+
     /* Mat4.multiply(
           Quat.toMat4(bones[i].qRot),
           Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
@@ -394,10 +432,10 @@ function calculateBones() {
     }
     //Which one is correct?
     //What does the inverse bindpose do again?
-    
+
     var pitchRad = glMatrix.toRadian(pitch);
     var yawRad = glMatrix.toRadian(yaw);
-    
+
     //vec3.fromRotation(rotAround, pitchRad, yawRad);
     //rotAround[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
     //rotAround[1] = Math.cos(yawRad) * Math.cos(pitchRad);
@@ -408,31 +446,31 @@ function calculateBones() {
     //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, [0, 1, 0], offRot);
     //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, offRot);
 
- /*        
-    if(i == mouse.selected){
-      var mouseVec = vec2.create();
-      mouseVec[0] = oldMouseX - mouse.X;
-      mouseVec[1] =  oldMouseY - mouse.Y;
-      vec2.normalize(mouseVec, mouseVec);
+    /*        
+       if(i == mouse.selected){
+         var mouseVec = vec2.create();
+         mouseVec[0] = oldMouseX - mouse.X;
+         mouseVec[1] =  oldMouseY - mouse.Y;
+         vec2.normalize(mouseVec, mouseVec);
 
-      var oldRot = r;
-      r = Math.atan2(mouseVec[0], mouseVec[1]);
-      
-      //vec3.transformQuat(rotAround, rotAround, bones[i].worldDualQuat[0]);
-      quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
-      //quat2.rotateX(bones[i].worldDualQuat, bones[i].worldDualQuat, r);
-      //Not exactly correct...
-      //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
-      //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
-    }
-    
-    quat2.normalize(bones[i].worldDualQuat,bones[i].worldDualQuat);
-    */
+         var oldRot = r;
+         r = Math.atan2(mouseVec[0], mouseVec[1]);
+         
+         //vec3.transformQuat(rotAround, rotAround, bones[i].worldDualQuat[0]);
+         quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
+         //quat2.rotateX(bones[i].worldDualQuat, bones[i].worldDualQuat, r);
+         //Not exactly correct...
+         //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
+         //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
+       }
+       
+       quat2.normalize(bones[i].worldDualQuat,bones[i].worldDualQuat);
+       */
     //Flatten it for OpenGL
     var tempBone = quat2.create();
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
     //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
-    
+
     //Now the bones are all equal to the root bone (Because of the inverse bindpose)
 
     //To WXYZ
@@ -693,6 +731,7 @@ function loadModelFile(url, texUrl, shaderProgram) {
   return fetch(url, {
     method: "get"
   }).then((response) => {
+    console.log(response.headers.get("Content-Length"));
     if (response.status === 200) {
       return response.arrayBuffer().then((arrayBuffer) => {
         var charByte = 1;
@@ -910,9 +949,9 @@ function keyboardHandlerDown(keyboardEvent) {
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
-    velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
-    velocity[1] = Math.sin(pitchRad);
-    velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
+      velocity[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
+      velocity[1] = Math.sin(pitchRad);
+      velocity[2] = -Math.cos(yawRad) * Math.cos(pitchRad);
       break;
     case "KeyS":
     case "ArrowDown":

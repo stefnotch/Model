@@ -4,7 +4,7 @@ var dots = false;
 var shadowOnlyDots = false;
 var dotsFXAA = false;
 var colorFXAA = true;
-
+var rotAroundCam = true;
 function initSidebar() {
     var options = sidebarStupidFirefox.getElementsByTagName("button");
     for (var i = 0; i < options.length; i++) {
@@ -92,6 +92,11 @@ function optionClick(event) {
                 Math.sin(pitchRad), -Math.cos(yawRad) * Math.cos(pitchRad)
             ];
             break;
+        case "rotate around cam":
+            this.classList.toggle("enabled");
+            rotAroundCam = !rotAroundCam;
+            break;
+            
     }
 
 }
