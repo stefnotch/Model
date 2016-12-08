@@ -78,8 +78,8 @@ var pos = [-0.12583708965284524, 2.9979705362177205, 1.3783995901996082],
   speed = 0.01;
 
 //Rotation
-var pitch = 5,
-  yaw = 0;
+var pitchRad = 0,
+  yawRad = 0;
 var pitchVel = 0,
   yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
@@ -132,8 +132,11 @@ function start() {
     var shaderProgram = new ShaderProg(vertexShader, fragmentShader); //eslint-disable-line
 
     Promise.all([
-      loadModelFile("Model/lucario/output.modelfile", "Model/lucario", shaderProgram)
+      loadModelFile("Model/lucario/output.modelfile", "Model/lucario", shaderProgram),
+      loadModelBones("Model/lucario/outputBones.js")
     ]).then((stuff) => {
+      setUpBones();
+      boneMat = calculateBones();
       //DO SOMETHING
       glcanvas.style.backgroundColor = "white";
       window.requestAnimationFrame(redraw);
@@ -141,9 +144,7 @@ function start() {
       glcanvas.style.backgroundColor = "red";
       throw error;
     });
-
-    setUpBones();
-    boneMat = calculateBones();
+    
     //depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
     //setUpPicker();
     pickerFramebuffer = new pixelPicker(pickPixel);
@@ -188,8 +189,8 @@ var modelMat = mat4.create(),
 var r = 0,
   oldMouseX, oldMouseY;
 
-  
-var inverseLookAt;
+
+var inverseLookAt, product;
 /**
  * Draw loop
  */
@@ -197,16 +198,16 @@ function redraw() {
   pos[0] += velocity[0] * speed;
   pos[1] += velocity[1] * speed;
   pos[2] += velocity[2] * speed;
-  pitch += pitchVel;
-  yaw += yawVel;
+  pitchRad += pitchVel;
+  yawRad += yawVel;
 
   //Note to self: Matrix multiplication order is weird.
   //Model mat
   //Translation
   mat4.fromTranslation(modelMat, pos);
   //Rotation
-  mat4.rotateY(modelMat, modelMat, glMatrix.toRadian(yaw));
-  mat4.rotateX(modelMat, modelMat, glMatrix.toRadian(pitch));
+  mat4.rotateY(modelMat, modelMat, yawRad);
+  mat4.rotateX(modelMat, modelMat, pitchRad);
 
   //View mat
   mat4.invert(viewMat, modelMat);
@@ -251,21 +252,22 @@ function redraw() {
         mouse.selected = pickerFramebuffer.pixel[0];
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
-        
-        var pitchRad = glMatrix.toRadian(pitch);
-        var yawRad = glMatrix.toRadian(yaw);
 
+        //TODO: Turn on rigging for as long as the user is dragging with the mouse
+        //TODO: Store this quat somewhere and only update the roll/z thingy!!
         var lookAt = quat.create();
         quat.rotateX(lookAt, lookAt, pitchRad);
         quat.rotateY(lookAt, lookAt, yawRad);
 
         quat.normalize(lookAt, lookAt);
         
-        quat.multiply(lookAt, lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+        //if(bones[mouse.selected].parent!=-1)
+        //quat.multiply(lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0], lookAt);
         
         inverseLookAt = quat.clone(lookAt);
         quat.conjugate(inverseLookAt, inverseLookAt);
-        currentDQ = quat2.clone(bones[mouse.selected].dq);
+        
+        product = quat.create();
         //TODO
         //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
         //http://www.songho.ca/opengl/files/gl_transform02.png
@@ -278,45 +280,55 @@ function redraw() {
 
       var oldRot = r;
       r = Math.atan2(mouseVec[0], mouseVec[1]);
-      var pitchRad = glMatrix.toRadian(pitch);
-      var yawRad = glMatrix.toRadian(yaw);
 
       //Rotate around the cam vector
       if (rotAroundCam) {
-        if(false) { //backup
-        var rotAround = vec3.create();
-        rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
-        rotAround[1] = -Math.sin(pitchRad);
-        rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
-        //vec3.fromRotation(rotAround, pitchRad, yawRad);
-        //vec3.scale(rotAround, rotAround, -1);
-        //To the dq's coordinate system
+        if (false) { //backup
+          var rotAround = vec3.create();
+          rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
+          rotAround[1] = -Math.sin(pitchRad);
+          rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
+          //vec3.fromRotation(rotAround, pitchRad, yawRad);
+          //vec3.scale(rotAround, rotAround, -1);
+          //To the dq's coordinate system
 
-        if (bones[mouse.selected].parent != -1)
-          vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+          if (bones[mouse.selected].parent != -1)
+            vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
 
-        /*[
-            Math.sin(yawRad) * Math.cos(pitchRad),
-            -Math.sin(pitchRad),
-            Math.cos(yawRad) * Math.cos(pitchRad)
-          ]*/
+          /*[
+              Math.sin(yawRad) * Math.cos(pitchRad),
+              -Math.sin(pitchRad),
+              Math.cos(yawRad) * Math.cos(pitchRad)
+            ]*/
 
-        quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
-          rotAround, -(oldRot - r)
-        );
+          quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
+            rotAround, -(oldRot - r)
+          );
+        } else {
+          if(bones[mouse.selected].parent!=-1){
+            
+          //parent --> -parent = identity
+          //bone --> -bone = identity (unless the bone gets rolled)
+          //now we need to apply the parent rotation
+          //and the actual bone rotation
+
+          var lookAt = quat.create();
+          quat.rotateX(lookAt, lookAt, pitchRad);
+          quat.rotateY(lookAt, lookAt, yawRad);
+
+          //Roll it        
+          quat.rotateZ(lookAt, lookAt, r);
+
+          quat.normalize(lookAt, lookAt);
+          
+          product = quat.create();
+          quat.multiply(product, lookAt, inverseLookAt);
+          //quat.multiply(lookAt, product, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+
+          //quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, product);
+        
+          }
         }
-        
-        var lookAt = quat.create();
-        quat.rotateX(lookAt, lookAt, pitchRad);
-        quat.rotateY(lookAt, lookAt, yawRad);
-        quat.normalize(lookAt, lookAt);
-        quat.multiply(lookAt, lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0]);
-        
-        var product = quat.create();
-        
-        quat.multiply(product, lookAt, inverseLookAt);
-        
-        quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, product);
       } else {
         quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, -(oldRot - r));
       }
@@ -421,13 +433,30 @@ function calculateBones() {
       }
 
       //Chain the bones together
-      quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
+      if(i == mouse.selected) {
+        //TODO: Rotates around the wrong point
+        var productDQ = quat2.create();
+        var transVec = vec3.create();
+        quat2.getTranslation(transVec, bones[bones[i].parent].worldDualQuat);
+        quat2.fromRotationTranslation(productDQ, product, transVec);
+        
+        quat2.mul(bones[i].worldDualQuat, productDQ, bones[bones[i].parent].worldDualQuat);
+        
+        //quat2.rotateByQuatPrepend(bones[i].worldDualQuat, product, bones[bones[i].parent].worldDualQuat);
+        
+        //quat2.copy(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat);
+        //quat.multiply(bones[i].worldDualQuat[0], product, bones[i].worldDualQuat[0]);
+        
+        //quat2.multiply(bones[i].worldDualQuat, product, bones[bones[i].parent].worldDualQuat);
+        quat2.multiply(bones[i].worldDualQuat, bones[i].worldDualQuat, localDualQuat);
+        
+      } else {
+        quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
+      }
+      
     }
     //Which one is correct?
     //What does the inverse bindpose do again?
-
-    var pitchRad = glMatrix.toRadian(pitch);
-    var yawRad = glMatrix.toRadian(yaw);
 
     //vec3.fromRotation(rotAround, pitchRad, yawRad);
     //rotAround[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
@@ -718,7 +747,8 @@ function nextHighestPowerOfTwo(x) {
 }
 
 
-function loadModelFile(url, texUrl, shaderProgram) {
+function loadModelFile(url, dataURL, shaderProgram) {
+  //TODO: also load the bones!
   //TODO: Show progress
   //Better than XMLHttpRequest, because the name is shorter!
   return fetch(url, {
@@ -774,9 +804,25 @@ function loadModelFile(url, texUrl, shaderProgram) {
           }
           pointer += arrayLength * floatByte;
           //Whee! Everything seems to be working so far..
-          addObjectToDraw(texUrl, shaderProgram, newModel, undefined, texName, color);
+          addObjectToDraw(dataURL, shaderProgram, newModel, undefined, texName, color);
           if (pointer >= data.byteLength) break;
         }
+      });
+    } else {
+      throw new Error("fetch failed" + response.status);
+    }
+  });
+}
+
+function loadModelBones(url) {
+  //TODO: Show progress
+  return fetch(url, {
+    method: "get"
+  }).then((response) => {
+    if (response.status === 200) {
+      return response.text().then((code) => {
+        //TODO: Use something different. This is horrible
+        eval(code);
       });
     } else {
       throw new Error("fetch failed" + response.status);
@@ -936,9 +982,6 @@ function handleDragOver(evt) {
 
 function keyboardHandlerDown(keyboardEvent) {
 
-  var yawRad = glMatrix.toRadian(yaw);
-  var pitchRad = glMatrix.toRadian(pitch);
-  
   switch (keyboardEvent.code) {
     case "KeyW":
     case "ArrowUp":
@@ -1007,8 +1050,8 @@ function scrollHandler(scrollEvent) {
 
 function mouseHandler(mouseEvent) {
   if (!rigging) {
-    yaw -= mouseEvent.movementX / 10;
-    pitch -= mouseEvent.movementY / 10;
+    yawRad -= mouseEvent.movementX / 500;
+    pitchRad -= mouseEvent.movementY / 500;
   }
   mouse.X = mouseEvent.offsetX;
   mouse.Y = mouseEvent.offsetY;
@@ -1036,8 +1079,8 @@ function touchHandlerMove(event) {
   event.preventDefault();
   var touch = event.changedTouches[0];
   if (!rigging) {
-    yaw -= (touchX - touch.clientX) / 10;
-    pitch -= (touchY - touch.clientY) / 10;
+    yawRad -= (touchX - touch.clientX) / 500;
+    pitchRad -= (touchY - touch.clientY) / 500;
   }
   touchX = touch.clientX;
   touchY = touch.clientY;
@@ -1047,8 +1090,8 @@ function touchHandlerEnd(event) {
   event.preventDefault();
   var touch = event.changedTouches[0];
   if (!rigging) {
-    yaw -= (touchX - touch.clientX) / 10;
-    pitch -= (touchY - touch.clientY) / 10;
+    yawRad -= (touchX - touch.clientX) / 500;
+    pitchRad -= (touchY - touch.clientY) / 500;
   }
   touchX = touch.clientX;
   touchY = touch.clientY;
