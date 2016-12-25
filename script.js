@@ -49,6 +49,9 @@ Floating point textures
 
 */
 
+//Dual quat: What rot-trans means: A point with a rotation
+//Pick a point. Now rotate it around the point you just picked (itself)
+
 //Fetch progress
 //https://jakearchibald.com/2015/thats-so-fetch/
 //http://stackoverflow.com/questions/35711724/progress-indicators-for-fetch (last post)
@@ -144,7 +147,7 @@ function start() {
       glcanvas.style.backgroundColor = "red";
       throw error;
     });
-    
+
     //depthRenderer = new depthRenderer(vertexShader,depthShader,renderDepth);
     //setUpPicker();
     pickerFramebuffer = new pixelPicker(pickPixel);
@@ -189,8 +192,13 @@ var modelMat = mat4.create(),
 var r = 0,
   oldMouseX, oldMouseY;
 
+///TODO: rename product. The name is horrible
+var inverseLookAt = quat2.create(),
+  product = quat2.create(),
+  lookAt = quat2.create();
 
-var inverseLookAt, product;
+var oldPitch = 0,
+  oldYaw = 0;
 /**
  * Draw loop
  */
@@ -214,21 +222,8 @@ function redraw() {
   //Projection mat
   mat4.multiply(projectionMat, mat4.perspective(projectionMat, Math.PI / 4, glcanvas.clientWidth / glcanvas.clientHeight, 0.1, 2000),
     viewMat);
-  /*
-  var b = 0;
-  var t = vec3.create();
-  quat2.getTranslation(t, bones[b].dq);
-  vec3.scale(t, t, -1);
-  quat2.translate(bones[b].dq, bones[b].dq, t);
-  quat2.getTranslation(t, bones[b+1].dq);
-  vec3.scale(t, t, -1);
-  quat2.translate(bones[b+1].dq, bones[b+1].dq, t);
-  quat2.translate(bones[b+1].dq, bones[b+1].dq, rotAround);*/
-
-  //
 
   if (mouse.clicked) {
-
     mouse.clicked = false;
   }
 
@@ -253,25 +248,23 @@ function redraw() {
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
 
-        //TODO: Turn on rigging for as long as the user is dragging with the mouse
-        //TODO: Store this quat somewhere and only update the roll/z thingy!!
-        var lookAt = quat.create();
-        quat.rotateX(lookAt, lookAt, pitchRad);
-        quat.rotateY(lookAt, lookAt, yawRad);
+        var transVec = vec3.create();
+        //quat2.getTranslation(transVec, bones[bones[mouse.selected].parent].worldDualQuat);
+        quat2.getTranslation(transVec, bones[mouse.selected].worldDualQuat);
+        quat2.fromTranslation(lookAt, transVec);
 
-        quat.normalize(lookAt, lookAt);
-        
+        quat2.rotateX(lookAt, lookAt, pitchRad);
+        quat2.rotateY(lookAt, lookAt, yawRad);
+        quat2.normalize(lookAt, lookAt);
+
         //if(bones[mouse.selected].parent!=-1)
         //quat.multiply(lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0], lookAt);
-        
-        inverseLookAt = quat.clone(lookAt);
-        quat.conjugate(inverseLookAt, inverseLookAt);
-        
-        product = quat.create();
+        //Now create the inverse dual quaternion
+        quat2.copy(inverseLookAt, lookAt);
+        quat2.conjugate(inverseLookAt, inverseLookAt);
         //TODO
         //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
         //http://www.songho.ca/opengl/files/gl_transform02.png
-        //bones[pickerFramebuffer.pixel[0]].worldDualQuat.getTranslation()
       }
     } else {
       var mouseVec = vec2.create();
@@ -283,56 +276,29 @@ function redraw() {
 
       //Rotate around the cam vector
       if (rotAroundCam) {
-        if (false) { //backup
-          var rotAround = vec3.create();
-          rotAround[0] = Math.sin(yawRad) * Math.cos(pitchRad);
-          rotAround[1] = -Math.sin(pitchRad);
-          rotAround[2] = Math.cos(yawRad) * Math.cos(pitchRad);
-          //vec3.fromRotation(rotAround, pitchRad, yawRad);
-          //vec3.scale(rotAround, rotAround, -1);
-          //To the dq's coordinate system
+        //TODO: Fix this (those bones should also be rotate-able)
+        //parent --> -parent = identity
+        //bone --> -bone = identity (unless the bone gets rolled)
+        //now we need to apply the parent rotation
+        //and the actual bone rotation
 
-          if (bones[mouse.selected].parent != -1)
-            vec3.transformQuat(rotAround, rotAround, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+        //If the lookat quat has changed
+        if (oldPitch != pitchRad) quat2.rotateX(lookAt, lookAt, (oldPitch - pitchRad));
+        if (oldYaw != yawRad) quat2.rotateY(lookAt, lookAt, (oldYaw - yawRad));
 
-          /*[
-              Math.sin(yawRad) * Math.cos(pitchRad),
-              -Math.sin(pitchRad),
-              Math.cos(yawRad) * Math.cos(pitchRad)
-            ]*/
+        //Roll it        
+        quat2.rotateZ(lookAt, lookAt, -(oldRot - r));
+        quat2.normalize(lookAt, lookAt);
+        quat2.multiply(product, lookAt, inverseLookAt);
+        //quat.multiply(lookAt, product, bones[bones[mouse.selected].parent].worldDualQuat[0]);
 
-          quat2.rotateAroundAxis(bones[mouse.selected].dq, bones[mouse.selected].dq, //
-            rotAround, -(oldRot - r)
-          );
-        } else {
-          if(bones[mouse.selected].parent!=-1){
-            
-          //parent --> -parent = identity
-          //bone --> -bone = identity (unless the bone gets rolled)
-          //now we need to apply the parent rotation
-          //and the actual bone rotation
-
-          var lookAt = quat.create();
-          quat.rotateX(lookAt, lookAt, pitchRad);
-          quat.rotateY(lookAt, lookAt, yawRad);
-
-          //Roll it        
-          quat.rotateZ(lookAt, lookAt, r);
-
-          quat.normalize(lookAt, lookAt);
-          
-          product = quat.create();
-          quat.multiply(product, lookAt, inverseLookAt);
-          //quat.multiply(lookAt, product, bones[bones[mouse.selected].parent].worldDualQuat[0]);
-
-          //quat2.rotateByQuat(bones[mouse.selected].dq, bones[mouse.selected].dq, product);
-        
-          }
-        }
       } else {
         quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, -(oldRot - r));
       }
     }
+    oldPitch = pitchRad;
+    oldYaw = yawRad;
+    //If the mouse wasn't pressed
   } else {
     displayText.style.backgroundColor = "white";
     mouse.selected = -1;
@@ -380,7 +346,6 @@ function animationStep(animationName) {
 
   }
 
-
   //The 2 keyframes
   var keyframe1;
 
@@ -407,22 +372,19 @@ function animationStep(animationName) {
   return false;
 }
 
-var rotAround = vec3.create();
-
+/**
+ * Calculates the bones. (Every single tick. That's a bit expensive, but whatever.)
+ */
 function calculateBones() {
   //animationStep(animationName);
+  var tempBone = quat2.create();
   for (var i = 0; i < bones.length; i++) {
 
     //Normalize the quaternions
     quat2.normalize(bones[i].dq, bones[i].dq);
-    //bones[i].dq.normalize();
     var localDualQuat = quat2.clone(bones[i].dq);
 
-
-    /* Mat4.multiply(
-          Quat.toMat4(bones[i].qRot),
-          Mat4.translation(bones[i].pos[0], bones[i].pos[1], bones[i].pos[2])
-        );*/
+    //rotation (only if it gets rotated) --> parent --> local bone
 
     //Root bone
     if (bones[i].parent == -1) {
@@ -431,69 +393,17 @@ function calculateBones() {
       if (bones[bones[i].parent].worldDualQuat == undefined) {
         console.log("Somehow, the parent bone is messed up." + i + " parent: " + bones[i].parent);
       }
-
       //Chain the bones together
-      if(i == mouse.selected) {
-        //TODO: Rotates around the wrong point
-        var productDQ = quat2.create();
-        var transVec = vec3.create();
-        quat2.getTranslation(transVec, bones[bones[i].parent].worldDualQuat);
-        quat2.fromRotationTranslation(productDQ, product, transVec);
-        
-        quat2.mul(bones[i].worldDualQuat, productDQ, bones[bones[i].parent].worldDualQuat);
-        
-        //quat2.rotateByQuatPrepend(bones[i].worldDualQuat, product, bones[bones[i].parent].worldDualQuat);
-        
-        //quat2.copy(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat);
-        //quat.multiply(bones[i].worldDualQuat[0], product, bones[i].worldDualQuat[0]);
-        
-        //quat2.multiply(bones[i].worldDualQuat, product, bones[bones[i].parent].worldDualQuat);
-        quat2.multiply(bones[i].worldDualQuat, bones[i].worldDualQuat, localDualQuat);
-        
-      } else {
-        quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
-      }
-      
+      quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
     }
-    //Which one is correct?
-    //What does the inverse bindpose do again?
 
-    //vec3.fromRotation(rotAround, pitchRad, yawRad);
-    //rotAround[0] = -Math.sin(yawRad) * Math.cos(pitchRad);
-    //rotAround[1] = Math.cos(yawRad) * Math.cos(pitchRad);
-    //rotAround[2] = Math.sin(pitchRad);
-    //vec3.scale(rotAround, rotAround, -1 * offRot);
-    //vec3.normalize(rotAround, rotAround);
-    //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
-    //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, [0, 1, 0], offRot);
-    //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, offRot);
-
-    /*        
-       if(i == mouse.selected){
-         var mouseVec = vec2.create();
-         mouseVec[0] = oldMouseX - mouse.X;
-         mouseVec[1] =  oldMouseY - mouse.Y;
-         vec2.normalize(mouseVec, mouseVec);
-
-         var oldRot = r;
-         r = Math.atan2(mouseVec[0], mouseVec[1]);
-         
-         //vec3.transformQuat(rotAround, rotAround, bones[i].worldDualQuat[0]);
-         quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
-         //quat2.rotateX(bones[i].worldDualQuat, bones[i].worldDualQuat, r);
-         //Not exactly correct...
-         //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
-         //quat2.rotateAroundAxis(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround, r);
-       }
-       
-       quat2.normalize(bones[i].worldDualQuat,bones[i].worldDualQuat);
-       */
+    //Add the rotation at the front (perfectly possible, because of associativity)
+    if (i == mouse.selected) {
+      quat2.mul(bones[i].worldDualQuat, product, bones[i].worldDualQuat);
+    }
     //Flatten it for OpenGL
-    var tempBone = quat2.create();
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
-    //quat2.translate(bones[i].worldDualQuat, bones[i].worldDualQuat, rotAround);
-
-    //Now the bones are all equal to the root bone (Because of the inverse bindpose)
+    //Now the bones are all equal to the root bone/identity (Because of the inverse bindpose)
 
     //To WXYZ
     boneArray[i * 8] = tempBone[0][3];
@@ -997,7 +907,6 @@ function keyboardHandlerDown(keyboardEvent) {
       break;
     case "KeyA":
     case "ArrowLeft":
-      pitchRad = 0;
       //yawVel = 1;
       velocity[0] = -Math.sin(yawRad + Math.PI / 2);
       velocity[1] = 0;
@@ -1005,7 +914,6 @@ function keyboardHandlerDown(keyboardEvent) {
       break;
     case "KeyD":
     case "ArrowRight":
-      pitchRad = 0;
       //yawVel = -1;
       velocity[0] = -Math.sin(yawRad - Math.PI / 2);
       velocity[1] = 0;
@@ -1044,25 +952,25 @@ function keyboardHandlerUp(keyboardEvent) {
   }
 }
 
-function scrollHandler(scrollEvent) {
-  speed -= scrollEvent.deltaY / 100;
-}
-
-function mouseHandler(mouseEvent) {
-  if (!rigging) {
-    yawRad -= mouseEvent.movementX / 500;
-    pitchRad -= mouseEvent.movementY / 500;
-  }
-  mouse.X = mouseEvent.offsetX;
-  mouse.Y = mouseEvent.offsetY;
-}
-
 function mouseClickHandler(mouseEvent) {
   mouse.clicked = true;
   mouse.X = mouseEvent.offsetX;
   mouse.Y = mouseEvent.offsetY;
   //http://www.opengl-tutorial.org/miscellaneous/clicking-on-objects/picking-with-an-opengl-hack/
   //http://stackoverflow.com/questions/21841483/webgl-using-framebuffers-for-picking-multiple-objects
+}
+
+function scrollHandler(scrollEvent) {
+  speed -= scrollEvent.deltaY / 100;
+}
+
+function mouseHandler(mouseEvent) {
+  if (!rigging && mouse.selected == -1) {
+    yawRad -= mouseEvent.movementX / 500;
+    pitchRad -= mouseEvent.movementY / 500;
+  }
+  mouse.X = mouseEvent.offsetX;
+  mouse.Y = mouseEvent.offsetY;
 }
 
 var touchX = 0,
@@ -1078,7 +986,7 @@ function touchHandlerStart(event) {
 function touchHandlerMove(event) {
   event.preventDefault();
   var touch = event.changedTouches[0];
-  if (!rigging) {
+  if (!rigging && mouse.selected == -1) {
     yawRad -= (touchX - touch.clientX) / 500;
     pitchRad -= (touchY - touch.clientY) / 500;
   }
@@ -1089,7 +997,7 @@ function touchHandlerMove(event) {
 function touchHandlerEnd(event) {
   event.preventDefault();
   var touch = event.changedTouches[0];
-  if (!rigging) {
+  if (!rigging && mouse.selected == -1) {
     yawRad -= (touchX - touch.clientX) / 500;
     pitchRad -= (touchY - touch.clientY) / 500;
   }
