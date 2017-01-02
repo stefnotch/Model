@@ -207,7 +207,6 @@ var inverseLookAt = quat2.create(),
   lookAt = quat2.create();
   
 
-var beforeLookAtQuat = quat.create();
 var ibeforeLookAtQuat = quat.create();
 var lookAtQuat = quat.create();
 var inverseLookAtQuat = quat.create();
@@ -267,27 +266,18 @@ function redraw() {
         
         ///
         quat.identity(rotQuat);
-        quat.copy(beforeLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
-        quat.copy(ibeforeLookAtQuat, beforeLookAtQuat);
+        quat.copy(ibeforeLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
         quat.conjugate(ibeforeLookAtQuat, ibeforeLookAtQuat);
         
         quat.identity(lookAtQuat);
         
-        //var tempRot = quat.create();
-        //quat.rotateX(tempRot, tempRot, pitchRad);
-        //quat.mul(lookAtQuat, lookAtQuat, tempRot);
-        //lookAtQuat[0] = -lookAtQuat[0];
-        //lookAtQuat[1] = -lookAtQuat[1];
-        //lookAtQuat[2] = -lookAtQuat[2];
-        //lookAtQuat[3] = -lookAtQuat[3];
-        //quat.rotateY(tempRot, tempRot, yawRad);
-        //quat.mul(lookAtQuat, lookAtQuat, tempRot);
         quat.rotateX(lookAtQuat, lookAtQuat, pitchRad);
         quat.rotateY(lookAtQuat, lookAtQuat, yawRad);
         quat.normalize(lookAtQuat, lookAtQuat);
         
         quat.copy(inverseLookAtQuat, lookAtQuat);
         quat.conjugate(inverseLookAtQuat, inverseLookAtQuat);
+        quat.multiply(inverseLookAtQuat, inverseLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
         ///
         
         
@@ -304,6 +294,7 @@ function redraw() {
         //Now create the inverse dual quaternion
         quat2.copy(inverseLookAt, lookAt);
         quat2.conjugate(inverseLookAt, inverseLookAt);
+        
         //TODO
         //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
         //http://www.songho.ca/opengl/files/gl_transform02.png
@@ -333,7 +324,6 @@ function redraw() {
         quat.normalize(lookAtQuat, lookAtQuat);
         quat.mul(rotQuat, ibeforeLookAtQuat, lookAtQuat);
         quat.mul(rotQuat, rotQuat, inverseLookAtQuat);
-        quat.mul(rotQuat, rotQuat, beforeLookAtQuat);
         ////
         
         //Roll it        
