@@ -85,13 +85,13 @@ var gl; //WebGL lives in here!
 var vaoExt; //Vertex Array Objects extension
 var glcanvas; //Our canvas
 //Translation
-var pos = [-0.12583708965284524, 2.9979705362177205, 1.3783995901996082],
+var pos = [-2, 5, 5],
   velocity = [0, 0, 0],
   speed = 0.01;
 
 //Rotation
-var pitchRad = 0,
-  yawRad = 0;
+var pitchRad = -0.23,
+  yawRad = -0.33;
 var pitchVel = 0,
   yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
@@ -273,16 +273,17 @@ function redraw() {
         
         quat.identity(lookAtQuat);
         
-        var tempRot = quat.create();
-        quat.rotateX(tempRot, tempRot, pitchRad);
-        quat.mul(lookAtQuat, lookAtQuat, tempRot);
-        lookAtQuat[0] = -lookAtQuat[0];
-        lookAtQuat[1] = -lookAtQuat[1];
-        lookAtQuat[2] = -lookAtQuat[2];
-        lookAtQuat[3] = -lookAtQuat[3];
-        quat.rotateY(tempRot, tempRot, yawRad);
-        quat.mul(lookAtQuat, lookAtQuat, tempRot);
-        
+        //var tempRot = quat.create();
+        //quat.rotateX(tempRot, tempRot, pitchRad);
+        //quat.mul(lookAtQuat, lookAtQuat, tempRot);
+        //lookAtQuat[0] = -lookAtQuat[0];
+        //lookAtQuat[1] = -lookAtQuat[1];
+        //lookAtQuat[2] = -lookAtQuat[2];
+        //lookAtQuat[3] = -lookAtQuat[3];
+        //quat.rotateY(tempRot, tempRot, yawRad);
+        //quat.mul(lookAtQuat, lookAtQuat, tempRot);
+        quat.rotateX(lookAtQuat, lookAtQuat, pitchRad);
+        quat.rotateY(lookAtQuat, lookAtQuat, yawRad);
         quat.normalize(lookAtQuat, lookAtQuat);
         
         quat.copy(inverseLookAtQuat, lookAtQuat);
@@ -435,7 +436,7 @@ function calculateBones() {
 
     //rotation (only if it gets rotated) --> parent --> local bone
     
-    if (bones[i].parent != -1 && i == mouse.selected) {
+    if (/****bones[i].parent != -1 && */i == mouse.selected) {
       /***
       quat2.normalize(bones[i].worldDualQuat, bones[i].worldDualQuat);
       var inv = quat.clone(bones[i].worldDualQuat[0]);
