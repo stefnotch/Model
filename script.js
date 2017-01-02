@@ -48,6 +48,15 @@ Transform feedback
 Floating point textures
 
 */
+/*
+quat2 * quat2^-1 == quat2^-1 * quat2 => identity
+n = quat2.fromValues(Math.random()*30-15,Math.random()*30-15,Math.random()*30-15,Math.random()*30-15,Math.random()*30-15,Math.random()*30-15,Math.random()*30-15,Math.random()*30-15);
+quat2.normalize(n,n);
+t = quat2.conjugate(quat2.create(), n);
+
+quat2.str(quat2.mul(quat2.create(), t, n)) + quat2.str(quat2.mul(quat2.create(), n, t));
+*/
+
 
 //Dual quat: What rot-trans means: A point with a rotation
 //Pick a point. Now rotate it around the point you just picked (itself)
@@ -247,9 +256,9 @@ function redraw() {
         mouse.selected = pickerFramebuffer.pixel[0];
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
-
+        quat2.identity(product);
+      
         var transVec = vec3.create();
-        //quat2.getTranslation(transVec, bones[bones[mouse.selected].parent].worldDualQuat);
         quat2.getTranslation(transVec, bones[mouse.selected].worldDualQuat);
         quat2.fromTranslation(lookAt, transVec);
 
@@ -283,8 +292,8 @@ function redraw() {
         //and the actual bone rotation
 
         //If the lookat quat has changed
-        if (oldPitch != pitchRad) quat2.rotateX(lookAt, lookAt, (oldPitch - pitchRad));
-        if (oldYaw != yawRad) quat2.rotateY(lookAt, lookAt, (oldYaw - yawRad));
+        if (oldPitch != pitchRad) quat2.rotateX(lookAt, lookAt, -(oldPitch - pitchRad));
+        if (oldYaw != yawRad) quat2.rotateY(lookAt, lookAt, -(oldYaw - yawRad));
 
         //Roll it        
         quat2.rotateZ(lookAt, lookAt, -(oldRot - r));
@@ -385,7 +394,31 @@ function calculateBones() {
     var localDualQuat = quat2.clone(bones[i].dq);
 
     //rotation (only if it gets rotated) --> parent --> local bone
-
+    
+    if (bones[i].parent != -1 && i == mouse.selected) {
+      quat2.normalize(bones[i].worldDualQuat, bones[i].worldDualQuat);
+      var inv = quat.clone(bones[i].worldDualQuat[0]);
+      quat.conjugate(inv, inv);
+      //Chain the product in here
+      quat.mul(inv, inv, product[0]);
+      quat.mul(inv, inv, bones[i].worldDualQuat[0]);
+      
+      quat2.rotateByQuatAppend(localDualQuat, localDualQuat, inv);
+      /*
+      //Works
+      var inv = quat2.clone(bones[bones[i].parent].worldDualQuat);
+      quat2.conjugate(inv, inv);
+      //Chain the product in here
+      quat2.mul(inv, inv, product);
+      //console.log(vec3.str(quat2.getTranslation(vec3.create(),product)));
+      quat2.mul(inv, inv, bones[bones[i].parent].worldDualQuat);
+      
+      //quat2.rotateByQuatPrepend(localDualQuat, inv[0], localDualQuat);
+      //console.log(vec3.str(quat2.getTranslation(vec3.create(),inv)));
+      quat2.mul(localDualQuat, inv, localDualQuat);
+      */
+    }
+    
     //Root bone
     if (bones[i].parent == -1) {
       bones[i].worldDualQuat = localDualQuat;
@@ -398,9 +431,12 @@ function calculateBones() {
     }
 
     //Add the rotation at the front (perfectly possible, because of associativity)
+    /*
     if (i == mouse.selected) {
       quat2.mul(bones[i].worldDualQuat, product, bones[i].worldDualQuat);
     }
+    */
+    
     //Flatten it for OpenGL
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
     //Now the bones are all equal to the root bone/identity (Because of the inverse bindpose)
