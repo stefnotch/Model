@@ -205,6 +205,13 @@ var r = 0,
 var inverseLookAt = quat2.create(),
   product = quat2.create(),
   lookAt = quat2.create();
+  
+
+var beforeLookAtQuat = quat.create();
+var ibeforeLookAtQuat = quat.create();
+var lookAtQuat = quat.create();
+var inverseLookAtQuat = quat.create();
+var rotQuat = quat.create();
 
 var oldPitch = 0,
   oldYaw = 0;
@@ -257,11 +264,36 @@ function redraw() {
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
         quat2.identity(product);
-      
+        
+        ///
+        quat.identity(rotQuat);
+        quat.copy(beforeLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
+        quat.copy(ibeforeLookAtQuat, beforeLookAtQuat);
+        quat.conjugate(ibeforeLookAtQuat, ibeforeLookAtQuat);
+        
+        quat.identity(lookAtQuat);
+        
+        var tempRot = quat.create();
+        quat.rotateX(tempRot, tempRot, pitchRad);
+        quat.mul(lookAtQuat, lookAtQuat, tempRot);
+        lookAtQuat[0] = -lookAtQuat[0];
+        lookAtQuat[1] = -lookAtQuat[1];
+        lookAtQuat[2] = -lookAtQuat[2];
+        lookAtQuat[3] = -lookAtQuat[3];
+        quat.rotateY(tempRot, tempRot, yawRad);
+        quat.mul(lookAtQuat, lookAtQuat, tempRot);
+        
+        quat.normalize(lookAtQuat, lookAtQuat);
+        
+        quat.copy(inverseLookAtQuat, lookAtQuat);
+        quat.conjugate(inverseLookAtQuat, inverseLookAtQuat);
+        ///
+        
+        
         var transVec = vec3.create();
         quat2.getTranslation(transVec, bones[mouse.selected].worldDualQuat);
         quat2.fromTranslation(lookAt, transVec);
-
+        
         quat2.rotateX(lookAt, lookAt, pitchRad);
         quat2.rotateY(lookAt, lookAt, yawRad);
         quat2.normalize(lookAt, lookAt);
@@ -294,7 +326,15 @@ function redraw() {
         //If the lookat quat has changed
         if (oldPitch != pitchRad) quat2.rotateX(lookAt, lookAt, -(oldPitch - pitchRad));
         if (oldYaw != yawRad) quat2.rotateY(lookAt, lookAt, -(oldYaw - yawRad));
-
+        
+        ////
+        quat.rotateZ(lookAtQuat, lookAtQuat, r - oldRot);
+        quat.normalize(lookAtQuat, lookAtQuat);
+        quat.mul(rotQuat, ibeforeLookAtQuat, lookAtQuat);
+        quat.mul(rotQuat, rotQuat, inverseLookAtQuat);
+        quat.mul(rotQuat, rotQuat, beforeLookAtQuat);
+        ////
+        
         //Roll it        
         quat2.rotateZ(lookAt, lookAt, -(oldRot - r));
         quat2.normalize(lookAt, lookAt);
@@ -396,6 +436,7 @@ function calculateBones() {
     //rotation (only if it gets rotated) --> parent --> local bone
     
     if (bones[i].parent != -1 && i == mouse.selected) {
+      /***
       quat2.normalize(bones[i].worldDualQuat, bones[i].worldDualQuat);
       var inv = quat.clone(bones[i].worldDualQuat[0]);
       quat.conjugate(inv, inv);
@@ -404,6 +445,9 @@ function calculateBones() {
       quat.mul(inv, inv, bones[i].worldDualQuat[0]);
       
       quat2.rotateByQuatAppend(localDualQuat, localDualQuat, inv);
+      */
+      quat2.rotateByQuatAppend(localDualQuat, localDualQuat, rotQuat);
+      
       /*
       //Works
       var inv = quat2.clone(bones[bones[i].parent].worldDualQuat);
