@@ -201,13 +201,6 @@ var modelMat = mat4.create(),
 var r = 0,
   oldMouseX, oldMouseY;
 
-///TODO: rename product. The name is horrible
-var inverseLookAt = quat2.create(),
-  product = quat2.create(),
-  lookAt = quat2.create();
-  
-
-var ibeforeLookAtQuat = quat.create();
 var lookAtQuat = quat.create();
 var inverseLookAtQuat = quat.create();
 var rotQuat = quat.create();
@@ -262,39 +255,23 @@ function redraw() {
         mouse.selected = pickerFramebuffer.pixel[0];
         oldMouseX = mouse.X;
         oldMouseY = mouse.Y;
-        quat2.identity(product);
         
-        ///
+        //(parents --> child) --> undo(parents --> child) --> lookat quat (roll) --> redo (parents --> child)
+        //Reset the rot quat
         quat.identity(rotQuat);
-        quat.copy(ibeforeLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
-        quat.conjugate(ibeforeLookAtQuat, ibeforeLookAtQuat);
+        //Get the inverse bone quat (parents --> child)
+        quat.copy(lookAtQuat, bones[mouse.selected].worldDualQuat[0]);
+        quat.conjugate(lookAtQuat, lookAtQuat);
         
-        quat.identity(lookAtQuat);
-        
-        quat.rotateX(lookAtQuat, lookAtQuat, pitchRad);
+        //Rotate it (so that it represents the camera vector)
         quat.rotateY(lookAtQuat, lookAtQuat, yawRad);
+        quat.rotateX(lookAtQuat, lookAtQuat, pitchRad);
+        //Just for safety
         quat.normalize(lookAtQuat, lookAtQuat);
-        
+        //Get the inverse
         quat.copy(inverseLookAtQuat, lookAtQuat);
         quat.conjugate(inverseLookAtQuat, inverseLookAtQuat);
-        quat.multiply(inverseLookAtQuat, inverseLookAtQuat, bones[mouse.selected].worldDualQuat[0]);
-        ///
-        
-        
-        var transVec = vec3.create();
-        quat2.getTranslation(transVec, bones[mouse.selected].worldDualQuat);
-        quat2.fromTranslation(lookAt, transVec);
-        
-        quat2.rotateX(lookAt, lookAt, pitchRad);
-        quat2.rotateY(lookAt, lookAt, yawRad);
-        quat2.normalize(lookAt, lookAt);
 
-        //if(bones[mouse.selected].parent!=-1)
-        //quat.multiply(lookAt, bones[bones[mouse.selected].parent].worldDualQuat[0], lookAt);
-        //Now create the inverse dual quaternion
-        quat2.copy(inverseLookAt, lookAt);
-        quat2.conjugate(inverseLookAt, inverseLookAt);
-        
         //TODO
         //https://www.opengl.org/wiki/Compute_eye_space_from_window_space
         //http://www.songho.ca/opengl/files/gl_transform02.png
@@ -309,28 +286,14 @@ function redraw() {
 
       //Rotate around the cam vector
       if (rotAroundCam) {
-        //TODO: Fix this (those bones should also be rotate-able)
-        //parent --> -parent = identity
-        //bone --> -bone = identity (unless the bone gets rolled)
-        //now we need to apply the parent rotation
-        //and the actual bone rotation
-
         //If the lookat quat has changed
-        if (oldPitch != pitchRad) quat2.rotateX(lookAt, lookAt, -(oldPitch - pitchRad));
-        if (oldYaw != yawRad) quat2.rotateY(lookAt, lookAt, -(oldYaw - yawRad));
-        
-        ////
+        if (oldPitch != pitchRad) quat.rotateX(lookAtQuat, lookAtQuat, -(oldPitch - pitchRad));
+        if (oldYaw != yawRad) quat.rotateY(lookAtQuat, lookAtQuat, -(oldYaw - yawRad));
+        //Roll it
         quat.rotateZ(lookAtQuat, lookAtQuat, r - oldRot);
         quat.normalize(lookAtQuat, lookAtQuat);
-        quat.mul(rotQuat, ibeforeLookAtQuat, lookAtQuat);
-        quat.mul(rotQuat, rotQuat, inverseLookAtQuat);
-        ////
-        
-        //Roll it        
-        quat2.rotateZ(lookAt, lookAt, -(oldRot - r));
-        quat2.normalize(lookAt, lookAt);
-        quat2.multiply(product, lookAt, inverseLookAt);
-        //quat.multiply(lookAt, product, bones[bones[mouse.selected].parent].worldDualQuat[0]);
+        //lookat quat --> inverse
+        quat.mul(rotQuat, lookAtQuat, inverseLookAtQuat);
 
       } else {
         quat2.rotateY(bones[mouse.selected].dq, bones[mouse.selected].dq, -(oldRot - r));
@@ -424,34 +387,9 @@ function calculateBones() {
     quat2.normalize(bones[i].dq, bones[i].dq);
     var localDualQuat = quat2.clone(bones[i].dq);
 
-    //rotation (only if it gets rotated) --> parent --> local bone
-    
-    if (/****bones[i].parent != -1 && */i == mouse.selected) {
-      /***
-      quat2.normalize(bones[i].worldDualQuat, bones[i].worldDualQuat);
-      var inv = quat.clone(bones[i].worldDualQuat[0]);
-      quat.conjugate(inv, inv);
-      //Chain the product in here
-      quat.mul(inv, inv, product[0]);
-      quat.mul(inv, inv, bones[i].worldDualQuat[0]);
-      
-      quat2.rotateByQuatAppend(localDualQuat, localDualQuat, inv);
-      */
+    //Rotation
+    if (i == mouse.selected) {
       quat2.rotateByQuatAppend(localDualQuat, localDualQuat, rotQuat);
-      
-      /*
-      //Works
-      var inv = quat2.clone(bones[bones[i].parent].worldDualQuat);
-      quat2.conjugate(inv, inv);
-      //Chain the product in here
-      quat2.mul(inv, inv, product);
-      //console.log(vec3.str(quat2.getTranslation(vec3.create(),product)));
-      quat2.mul(inv, inv, bones[bones[i].parent].worldDualQuat);
-      
-      //quat2.rotateByQuatPrepend(localDualQuat, inv[0], localDualQuat);
-      //console.log(vec3.str(quat2.getTranslation(vec3.create(),inv)));
-      quat2.mul(localDualQuat, inv, localDualQuat);
-      */
     }
     
     //Root bone
@@ -464,13 +402,6 @@ function calculateBones() {
       //Chain the bones together
       quat2.multiply(bones[i].worldDualQuat, bones[bones[i].parent].worldDualQuat, localDualQuat);
     }
-
-    //Add the rotation at the front (perfectly possible, because of associativity)
-    /*
-    if (i == mouse.selected) {
-      quat2.mul(bones[i].worldDualQuat, product, bones[i].worldDualQuat);
-    }
-    */
     
     //Flatten it for OpenGL
     quat2.multiply(tempBone, bones[i].worldDualQuat, bones[i].dqInverseBindpose);
