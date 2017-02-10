@@ -1,39 +1,40 @@
 <!DOCTYPE html>
 <html>
 
-<head>
-  <title>Anime Shading</title>
-  <meta charset="utf-8">
-  <script src="glmatrix/gl-matrix-min.js" type="application/javascript" defer></script>
-  <script src="shaders.js" type="application/javascript" defer></script>
-  <script src="framebuffers.js" type="application/javascript" defer></script>
-  <script src="bones.js" type="application/javascript" defer></script>
-  <script src="script.js" type="application/javascript" defer></script>
-  <script src="sidebar.js" type="application/javascript" defer></script>
-  <!--Bah ;version=1.8 isn't supported in Chrome-->
-  <link rel="stylesheet" type="text/css" href="style.css">
-</head>
+  <head>
+    <title>Anime Shading</title>
+    <meta charset="utf-8">
+    <script src="glmatrix/gl-matrix-min.js" type="application/javascript" defer></script>
+    <script src="shaders.js" type="application/javascript" defer></script>
+    <script src="framebuffers.js" type="application/javascript" defer></script>
+    <script src="bones.js" type="application/javascript" defer></script>
+    <script src="script.js" type="application/javascript" defer></script>
+    <script src="sidebar.js" type="application/javascript" defer></script>
+    <!--Bah ;version=1.8 isn't supported in Chrome-->
+    <link rel="stylesheet" type="text/css" href="style.css">
+  </head>
 
-<body onload="start()">
-  <canvas id="glcanvas">Your browser doesn't appear to support the
+  <body onload="start()">
+    <canvas id="glcanvas">Your browser doesn't appear to support the
     <code>&lt;canvas&gt;</code> element.</canvas>
-  <input id="displayText" type="text" style="position:absolute; bottom:10px;">
+    <input id="displayText" type="text" style="position:absolute; bottom:10px;">
 
-  <!--Range input type = slider-->
-  <div id="sidebarStupidFirefox">
-    <button id="toggle" type="button">&#9776;</button>
-    <span class="header">
+    <!--Range input type = slider-->
+    <div id="sidebarStupidFirefox">
+      <button id="toggle" type="button">&#9776;</button>
+      <span class="header">
       <button type="button" class="back"></button>&nbsp;Buttons
     </span><br>
-    <span><button type="button">Rig</button></span><br>
-    <span><button type="button">Dots</button></span><br>
-    <span><button type="button">Dots2</button></span><br>
-    <span><button type="button">FXAA for dots</button></span><br>
-    <span><button type="button" class="enabled">FXAA for color</button></span><br>
-    <span><button type="button">Set Light</button></span><br>
-    <span><button type="button" class="enabled">Rotate Around Cam</button></span>
-  </div>
+      <span><button type="button">Rig</button></span><br>
+      <span><button type="button">Dots</button></span><br>
+      <span><button type="button">Dots2</button></span><br>
+      <span><button type="button">FXAA for dots</button></span><br>
+      <span><button type="button" class="enabled">FXAA for color</button></span><br>
+      <span><button type="button">Set Light</button></span><br>
+      <span><button type="button" class="enabled">Rotate Around Cam</button></span>
+      <span><button type="button">Lock mouse</button></span>
+    </div>
 
-</body>
+  </body>
 
 </html>

@@ -3,7 +3,7 @@ git commit -am "your message goes here"
 git push
 */
 
-/*global pickPixel fetch displayText vec2 loadModelBones calculateBoneTree */
+/*global pickPixel fetch displayText vec2 loadModelBones calculateSkeleton boneObjects anim skelAnim*/
 /*global normalsVShader normalsFShader */
 /*global initSidebar rigging pixelPicker */
 
@@ -14,7 +14,6 @@ git push
 //https://hacks.mozilla.org/2014/03/introducing-the-canvas-debugger-in-firefox-developer-tools/
 /*TODO
 Edit the texture at runtime (Color and edge detection)
-Matrix multiplication library, they are doing everything that I can do, and better
 bones:
 https://www.cs.utah.edu/~ladislav/kavan05spherical/kavan05spherical.pdf (Spherical Blend Skinning)
 http://image.diku.dk/projects/media/kasper.amstrup.andersen.07.pdf (Has source code!!!!)
@@ -33,9 +32,9 @@ USE gl.readPixels and apply an edge detection shader to all textures prefixed wi
 Apply a sharpen shader to all textures prefixed with s_
 Triangles that make up the valleys are inside the model. (The ends of the spikes are inside the model)
 Don't switch shaders as often
-https://sourceforge.net/p/assimp/discussion/817654/thread/5462cbf5/
-
+Nice animation editor/playback (like in blender)
 Normalize -> 32 bits (float) to 8 bits (0,1 range)
+Visibility Determination: Frustum Culling, Occlusion Culling
 
 Webgl 2:
 NPOT textures
@@ -49,7 +48,8 @@ Floating point textures
 
 */
 /*
-quat2 * quat2^-1 == quat2^-1 * quat2 => identity
+Hypothesis: quat2 * quat2^-1 == quat2^-1 * quat2 => identity
+Experiment:
 n = quat2.fromValues(Math.random()*30-15,Math.random()*30-15,
   Math.random()*30-15, Math.random()*30-15,
   Math.random()*30-15, Math.random()*30-15,
@@ -59,7 +59,6 @@ t = quat2.conjugate(quat2.create(), n);
 
 quat2.str(quat2.mul(quat2.create(), t, n)) + quat2.str(quat2.mul(quat2.create(), n, t));
 */
-
 
 //Dual quat: What rot-trans means: A point with a rotation
 //Pick a point. Now rotate it around the point you just picked (itself)
@@ -92,7 +91,7 @@ var glcanvas; //Our canvas
 //Translation
 var pos = [-2, 5, 5],
   velocity = [0, 0, 0],
-  speed = 0.01;
+  speed = 1.0;
 
 //Rotation
 var pitchRad = -0.23,
@@ -101,21 +100,10 @@ var pitchVel = 0,
   yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
 
-//bones, animations and OpenGL array {b:, a:, array:}
-/*
-a: {
-  bindpose: {
-    frameTime: 0,
-    usedBones: [which bone does dq1 refer to],
-    frames: [
-      [dq1, dq2, ..],
-      [dq1, dq2, ..]
-    ]
-  },
-  walk: {}
-}
-*/
-var boneObjects = [];
+var prevTime = 0;
+var timeAvg = 0;
+/**Global time variable*/
+var time = 0;
 
 var objectsToDraw = [];
 
@@ -142,16 +130,24 @@ var pickerFramebuffer;
 
 //Called by the body
 function start() {
-  //window.onerror
-  /*console.log = (s) => {
-    alert(s.toString());
-  };
-  console.info = (s) => {
-    alert(s.toString());
-  };
-  console.warn = (s) => {
-    alert(s.toString());
-  };*/
+  //TODO: Fix/Finish this (stacktrace)
+  /*window.onerror = function (msg, url, lineNo, columnNo, error) {
+    var string = msg.toLowerCase();
+    var substring = "script error";
+    if (string.indexOf(substring) > -1){
+        alert('Script Error: See Browser Console for Detail');
+    } else {
+        var message = [
+            'Message: ' + msg,
+            'URL: ' + url,
+            'Line: ' + lineNo,
+            'Column: ' + columnNo,
+            'Error object: ' + JSON.stringify(error)
+        ].join(' - ');
+        alert(message);
+    }
+    return false;
+};*/
 
   initCanvas("glcanvas");
   initSidebar();
@@ -168,7 +164,7 @@ function start() {
       loadModelBones("Model/lucario/outputBones.js")
     ]).then((stuff) => {
       for (var i = 0; i < boneObjects.length; i++) {
-        calculateBoneTree(boneObjects[i]);
+        calculateSkeleton(boneObjects[i]);
       }
       glcanvas.style.backgroundColor = "white";
       window.requestAnimationFrame(redraw);
@@ -228,15 +224,19 @@ var rotQuat = quat.create();
 
 var oldPitch = 0,
   oldYaw = 0;
+
 /**
  * Draw loop
  */
-function redraw() {
-  pos[0] += velocity[0] * speed;
-  pos[1] += velocity[1] * speed;
-  pos[2] += velocity[2] * speed;
-  pitchRad += pitchVel;
-  yawRad += yawVel;
+function redraw(timestamp) {
+  timeAvg = Math.min(movingAverage(timeAvg, timestamp - prevTime), 1 / 10); //At least 1 fps
+  prevTime = timestamp;
+  
+  pos[0] += velocity[0] * speed * timeAvg;
+  pos[1] += velocity[1] * speed * timeAvg;
+  pos[2] += velocity[2] * speed * timeAvg;
+  pitchRad += pitchVel * timeAvg;
+  yawRad += yawVel * timeAvg;
 
   //Note to self: Matrix multiplication order is weird.
   //Model mat
@@ -266,13 +266,13 @@ function redraw() {
         0
       ]);
       mat4.multiply(mouseProjectionMat, mouseProjectionMat, projectionMat);
-      pickerFramebuffer.pickPixel(objectsToDraw, mouseProjectionMat, boneObjects[0].array);
+      pickerFramebuffer.pickPixel(objectsToDraw, mouseProjectionMat, boneObjects[0/*TODO: Fix this number*/].array);
 
       //console.log(`rgba(${pickerFramebuffer.pixel[0]}`);
       if (pickerFramebuffer.pixel[0] == 255) {
         displayText.value = "Nu bones to see here";
       } else {
-        displayText.value = boneObjects[0].b[pickerFramebuffer.pixel[0]].name;
+        displayText.value = boneObjects[0].s[pickerFramebuffer.pixel[0]].name;
         displayText.style.backgroundColor = "red";
         mouse.selected = pickerFramebuffer.pixel[0];
         oldMouseX = mouse.X;
@@ -282,7 +282,7 @@ function redraw() {
         //Reset the rot quat
         quat.identity(rotQuat);
         //Get the inverse bone quat (parents --> child)
-        quat.copy(lookAtQuat, boneObjects[0].b[mouse.selected].dqWorld[0]);
+        quat.copy(lookAtQuat, boneObjects[0/*TODO: Fix this number*/].s[mouse.selected].dqWorld[0]);
         quat.conjugate(lookAtQuat, lookAtQuat);
 
         //Rotate it (so that it represents the camera vector)
@@ -318,7 +318,7 @@ function redraw() {
         quat.mul(rotQuat, lookAtQuat, inverseLookAtQuat);
 
       } else {
-        quat2.rotateY(boneObjects[0].b[mouse.selected].dq, boneObjects[0].b[mouse.selected].dq, -(oldRot - r));
+        quat2.rotateY(boneObjects[0/*TODO: Fix this number*/].s[mouse.selected].dq, boneObjects[0/*TODO: Fix this number*/].s[mouse.selected].dq, -(oldRot - r));
       }
     }
     oldPitch = pitchRad;
@@ -327,7 +327,8 @@ function redraw() {
   }
 
   for (var i = 0; i < boneObjects.length; i++) {
-    calculateBoneTree(boneObjects[i]);
+    //skelAnim.step(boneObjects[i]);
+    calculateSkeleton(boneObjects[i]);
   }
 
   //depthRenderer.render(objectsToDraw, matrix, boneArray);
@@ -584,6 +585,13 @@ function nextHighestPowerOfTwo(x) {
   return x + 1;
 }
 
+/**
+ * An exponential moving average (average of 5 samples)
+ */
+function movingAverage(avg, newValue) {
+  const alpha = 1/5;
+  return alpha * newValue + (1 - alpha) * avg;
+}
 
 function loadModelFile(url, dataURL, shaderProgram) {
   //TODO: also load the bones!
@@ -683,16 +691,9 @@ function initCanvas(canvasName) {
   glcanvas.addEventListener("touchmove", touchHandlerMove);
   glcanvas.addEventListener("touchend", touchHandlerEnd);
   glcanvas.addEventListener("click", mouseClickHandler);
-
-  glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
+  /*glcanvas.requestPointerLock = glcanvas.requestPointerLock ||
     glcanvas.mozRequestPointerLock ||
-    glcanvas.webkitRequestPointerLock;
-  glcanvas.addEventListener("click", () => {
-    if (!rigging) {
-      glcanvas.requestPointerLock();
-    }
-  });
-
+    glcanvas.webkitRequestPointerLock;*/
 }
 
 /**
@@ -762,6 +763,7 @@ function handleDragOver(evt) {
   evt.dataTransfer.dropEffect = 'copy'; // Explicitly show this is a copy.
 }
 
+//TODO: Improve this, moving forward while moving left doesn't work
 function keyboardHandlerDown(keyboardEvent) {
 
   switch (keyboardEvent.code) {
@@ -828,8 +830,6 @@ function mouseClickHandler(mouseEvent) {
   mouse.clicked = true;
   mouse.X = mouseEvent.offsetX;
   mouse.Y = mouseEvent.offsetY;
-  //http://www.opengl-tutorial.org/miscellaneous/clicking-on-objects/picking-with-an-opengl-hack/
-  //http://stackoverflow.com/questions/21841483/webgl-using-framebuffers-for-picking-multiple-objects
 }
 
 function scrollHandler(scrollEvent) {

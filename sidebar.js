@@ -5,22 +5,23 @@ var shadowOnlyDots = false;
 var dotsFXAA = false;
 var colorFXAA = true;
 var rotAroundCam = true;
+
 function initSidebar() {
     var options = sidebarStupidFirefox.getElementsByTagName("button");
     for (var i = 0; i < options.length; i++) {
         if (options[i].id == "toggle") {
-            options[i].addEventListener("click", event => {
-                if (event.target.parentNode.style.transform != "translateX(0%)") {
-                    event.target.parentNode.style.transform = "translateX(0%)";
-                    event.target.parentNode.style.webkitTransform = "translateX(0%)";
-                } else {
-                    event.target.parentNode.style.transform = "translateX(-100%)";
-                    event.target.parentNode.style.webkitTransform = "translateX(-100%)";
-                }
-            });
+            options[i].addEventListener("click", toggleSidebar);
         } else {
             options[i].addEventListener("click", optionClick);
         }
+    }
+}
+
+function toggleSidebar() {
+    if (sidebarStupidFirefox.style.transform != "translateX(0%)") {
+        sidebarStupidFirefox.style.transform = "translateX(0%)";
+    } else {
+        sidebarStupidFirefox.style.transform = "translateX(-100%)";
     }
 }
 
@@ -85,7 +86,7 @@ function optionClick(event) {
             }
             break;
         case "set light":
-            
+
             lightRot = [-Math.sin(yawRad) * Math.cos(pitchRad),
                 Math.sin(pitchRad), -Math.cos(yawRad) * Math.cos(pitchRad)
             ];
@@ -94,7 +95,11 @@ function optionClick(event) {
             this.classList.toggle("enabled");
             rotAroundCam = !rotAroundCam;
             break;
-            
+        case "lock mouse":
+            glcanvas.requestPointerLock();
+            toggleSidebar();
+            break;
+
     }
 
 }

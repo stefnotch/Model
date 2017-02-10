@@ -134,6 +134,7 @@ uniform vec4 u_bones[113 * 2]; //Bones that can be moved
 varying vec3 v_normal;
 
 void main(void) {
+    //https://web.archive.org/web/20120311173707/http://isg.cs.tcd.ie/kavanl/dq/dqs.cg
     vec4 blendDQ[2];
 
     blendDQ[0] = (a_boneWeight)*u_bones[(2*int(a_bone.x) + 0)];
@@ -301,10 +302,10 @@ precision mediump float;
 varying vec2 v_texcoord;
 uniform vec2 u_windowSize;
 uniform sampler2D u_texture;
-#define FXAA_SPAN_MAX 8.0
+#define FXAA_SPAN_MAX 16.0
 #define FXAA_REDUCE_MUL   (1.0/FXAA_SPAN_MAX)
-#define FXAA_REDUCE_MIN   (1.0/128.0)
-#define FXAA_SUBPIX_SHIFT (1.0/8.0)
+#define FXAA_REDUCE_MIN   (1.0/8.0)
+#define FXAA_SUBPIX_SHIFT (1.0/16.0)
 
 //w only FXAA
 vec3 FxaaPixelShader( vec4 uv, sampler2D tex, vec2 rcpFrame) {

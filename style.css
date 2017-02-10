@@ -19,7 +19,6 @@ body {
   transition: transform 0.2s;
   left: 0px;
   top: 0px;
-  -webkit-transform: translateX(-100%);
   transform: translateX(-100%);
   height: 100%;
   font-family: "Comic Sans MS", "Comic Sans", cursive;
