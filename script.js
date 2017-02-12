@@ -100,10 +100,9 @@ var pitchVel = 0,
   yawVel = 0;
 var lightRot = [1, -0.5, -0.3];
 
-var prevTime = 0;
 var timeAvg = 0;
 /**Global time variable*/
-var time = 0;
+var globalTime = 0;
 
 var objectsToDraw = [];
 
@@ -229,8 +228,8 @@ var oldPitch = 0,
  * Draw loop
  */
 function redraw(timestamp) {
-  timeAvg = Math.min(movingAverage(timeAvg, timestamp - prevTime), 1 / 10); //At least 1 fps
-  prevTime = timestamp;
+  timeAvg = Math.min(movingAverage(timeAvg, timestamp - globalTime), 1 / 10); //At least 1 fps
+  globalTime = timestamp;
   
   pos[0] += velocity[0] * speed * timeAvg;
   pos[1] += velocity[1] * speed * timeAvg;
