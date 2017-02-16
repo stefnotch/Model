@@ -5,7 +5,7 @@ git push
 
 /*global pickPixel fetch displayText vec2 loadModelBones calculateSkeleton boneObjects anim skelAnim*/
 /*global normalsVShader normalsFShader */
-/*global initSidebar rigging pixelPicker */
+/*global initSidebar rigging pixelPicker performance*/
 
 //cgc -entry dqsFast -profile glslv -profileopts version=120 C:\Users\stefan\Downloads\Skinning\test.cg
 //https://www.opengl.org/wiki/Performance
@@ -102,7 +102,7 @@ var lightRot = [1, -0.5, -0.3];
 
 var timeAvg = 0;
 /**Global time variable*/
-var globalTime = 0;
+var globalTime = performance.now();
 
 var objectsToDraw = [];
 
@@ -228,7 +228,7 @@ var oldPitch = 0,
  * Draw loop
  */
 function redraw(timestamp) {
-  timeAvg = Math.min(movingAverage(timeAvg, timestamp - globalTime), 1 / 10); //At least 1 fps
+  timeAvg = Math.max(movingAverage(timeAvg, timestamp - globalTime), 1000); //At least 1 fps
   globalTime = timestamp;
   
   pos[0] += velocity[0] * speed * timeAvg;
@@ -326,7 +326,7 @@ function redraw(timestamp) {
   }
 
   for (var i = 0; i < boneObjects.length; i++) {
-    //skelAnim.step(boneObjects[i]);
+    skelAnim.step(boneObjects[i]);
     calculateSkeleton(boneObjects[i]);
   }
 

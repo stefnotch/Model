@@ -55,13 +55,16 @@ Sub-skeletal Animation (Animating only a part of the skeleton)
  * An animation which actually gets executed
  */
 var skeletonAnimation = {
-  create: function(whichAnimation) {
+  create: function(animation) {
     //Animations that happen at the same time..?
     return {
-      fps: whichAnimation.defaultFPS,
+      /**
+       * frames/millisecond
+       */
+      fpms: animation.defaultFPMS,
       /**When should the animation start*/
       startTime: globalTime,
-      animation: whichAnimation,
+      animation: animation,
       /**
        * blendWeights add up to 1 -> lerp
        * blendWeights over 1 -> subtract one and additive blending
@@ -73,10 +76,16 @@ var skeletonAnimation = {
     };
   },
   /**
-   * duration = fps * animation.length
+   * duration = fpms * animation.length
    */
   getDuration: function(whichAnimation) {
-    return whichAnimation.fps * whichAnimation.animation.frames.length;
+    return whichAnimation.fpms * whichAnimation.animation.frames.length;
+  },
+  /**
+   * Duration in milliseconds
+   */
+  setDuration: function(whichAnimation, duration) {
+    whichAnimation.fpms = duration / whichAnimation.animation.frames.length;
   },
   /**
    * localTime = globalTime - startTime
@@ -91,6 +100,9 @@ var skeletonAnimation = {
       startTime: globalTime
     };
   },
+  addSkelAnim: function(skeletonAnimations, whichAnimation) {
+    //Insert a frame sorted by the start time
+  },
   //TODO: BAD! BAD! BROKEN!
   /**
    * Applies an animation step (The skeleton will get changed)
@@ -99,16 +111,19 @@ var skeletonAnimation = {
   step: function(boneObject) {
     var skelAnims = boneObject.a;
     var i = boneObject.aFrontIndex;
-    //Skip all the animations which are over
+    //Skip all the animations which are over (increment i as long as the end time is over)
     //TODO: Skip the metachannels which already got executed
     //TODO: Metachannels in a different array?
-    for (;
-      (i < skelAnims.length) && (globalTime > skelAnims[i].startTime + this.getDuration(skelAnims[i])); i++) {}
+    while (++i &&
+      i < skelAnims.length &&
+      skelAnims[i].startTime + this.getDuration(skelAnims[i]) < globalTime) {}
     //Set the bone index to the first animation which still has to get executed
     boneObject.aFrontIndex = i - 1;
 
     //Loop over all animations which will get executed.
-    for (var i = boneObject.aFrontIndex; i < skelAnims.length && globalTime < skelAnims[i].startTime; i++) {
+    for (var i = boneObject.aFrontIndex; i < skelAnims.length &&
+      //TODO: Stop when the start time is after the global time.
+      skelAnims[i].startTime < globalTime; i++) {
       var currAnim = skelAnims[i];
       if (currAnim.executed == undefined) {
         this.execute(boneObject, currAnim);
@@ -122,17 +137,24 @@ var skeletonAnimation = {
     }
   },
   /**
+   * Is the animation currently getting executed
+   */
+  isExecuting: function(whichAnimation) {
+    return globalTime >= whichAnimation.startTime && whichAnimation.startTime + this.getDuration(whichAnimation) <= globalTime;
+  },
+  /**
    * TODO: Change this: calculateSkeleton will have to be called after this 
    * An animation (not a meta animation!) will get executed
    */
   execute: function(boneObject, whichAnimation) {
+    if (!this.isExecuting(whichAnimation)) return;
     var animation = whichAnimation.animation;
     /*localTime/duration -> normalized
-    localTime/(fps*frames) -> normalized
-    localTime/(fps*frames) * frames -> in the correct range
-    localTime/fps -> in the correct range*/
+    localTime/(fpms*frames) -> normalized
+    localTime/(fpms*frames) * frames -> in the correct range
+    localTime/fpms -> in the correct range*/
     //TODO: Negative frame index!
-    var frameIndex = this.getLocalTime(whichAnimation) / whichAnimation.fps;
+    var frameIndex = this.getLocalTime(whichAnimation) * whichAnimation.fpms;
     //TODO: <1, 1, >1
     if (whichAnimation.blendWeight == 1) {
 
@@ -173,7 +195,7 @@ var animation = {
       frames: [
         []
       ],
-      defaultFPS: 0
+      defaultFPMS: 0.1 / 1000
     };
   },
   /**
@@ -191,6 +213,7 @@ var animation = {
    * animation: which animation should the bone get added to
    * bone: a quat2
    * boneIndex: the index of the bone in the hierarchy
+   * returns: Index of the bone (in the frames) that got added
    */
   addBone: function(animation, bone, boneIndex) {
     var usedBoneIndex = indexOfSorted(animation.usedBones, boneIndex);
@@ -203,6 +226,7 @@ var animation = {
         frames[i].splice(usedBoneIndex, 0, quat2.clone(bone));
       }
     }
+    return usedBoneIndex;
   },
   copyFrame: function(frame) {
     var newFrame = new Array(frame.length);
@@ -210,8 +234,17 @@ var animation = {
       newFrame[i] = quat2.clone(frame[i]);
     }
     return newFrame;
-  }
-
+  },
+  /**
+   * Adds a frame to an animation
+   * If the frame if left out, it duplicates the last frame
+   * TODO: Number of bones check & merge?
+   */
+  addFrame: function(animation, frame) {
+      if (frame == null || frame == undefined) animation.frames.push(this.copyFrame(animation.frames[animation.frames.length - 1]));
+      else animation.frames.push(frame);
+    }
+    //TODO: Get bone by index
 };
 
 var anim = animation;
@@ -250,7 +283,6 @@ function indexOfSorted(array, element) {
  * Calculates the bones. (Every single tick. That's a bit expensive, but whatever.)
  */
 function calculateSkeleton(boneObject) {
-  //animationStepNEWFIXTHISBADNAME(boneObject, animName);
   var skeleton = boneObject.s;
   var boneArray = boneObject.array;
   var skelAnimations = boneObject.a;
@@ -266,8 +298,13 @@ function calculateSkeleton(boneObject) {
     if (i == mouse.selected) {
       quat2.rotateByQuatAppend(localDualQuat, localDualQuat, rotQuat);
       if (mouse.released) {
-        //TODO: broken!
-        //anim.addBone(skelAnimations[0 /*TODO: Fix this number*/ ].animation, localDualQuat, i);
+        var tempAnim = animations.humanoid.bindpose;
+        //Add a new frame
+        anim.addFrame(tempAnim);
+        //Add the bone's bindpose
+        var indexOfNewBone = anim.addBone(tempAnim, quat2.clone(currBone.dq), i);
+        //Add the changed bone
+        tempAnim.frames[tempAnim.frames.length - 1][indexOfNewBone] = quat2.clone(localDualQuat);
       }
     }
 
@@ -323,7 +360,6 @@ function loadModelBones(url) {
         if (animations.humanoid == null) animations.humanoid = {};
         var animHuman = animations.humanoid;
         if (animHuman.bindpose == null) animHuman.bindpose = anim.create();
-        if (animHuman.test == null) animHuman.test = anim.create();
 
         //TODO: Use something different. This is horrible?
         //http://www.2ality.com/2014/01/eval.html
@@ -336,7 +372,6 @@ function loadModelBones(url) {
         //TODO: REMOVE THIS:
         newBoneObj.a = [
           skelAnim.create(animHuman.bindpose),
-          skelAnim.create(animHuman.test),
         ];
         boneObjects.push(newBoneObj);
 
