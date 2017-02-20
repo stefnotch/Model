@@ -3,7 +3,8 @@ git commit -am "your message goes here"
 git push
 */
 
-/*global pickPixel fetch displayText vec2 loadModelBones calculateSkeleton boneObjects anim skelAnim*/
+/*global pickPixel fetch displayText vec2 loadModelBones calculateSkeleton boneObjects animSeq animClip anim animation*/
+
 /*global normalsVShader normalsFShader */
 /*global initSidebar rigging pixelPicker performance*/
 
@@ -58,6 +59,7 @@ quat2.normalize(n,n);
 t = quat2.conjugate(quat2.create(), n);
 
 quat2.str(quat2.mul(quat2.create(), t, n)) + quat2.str(quat2.mul(quat2.create(), n, t));
+Yep, hypothesis confirmed!
 */
 
 //Dual quat: What rot-trans means: A point with a rotation
@@ -91,7 +93,7 @@ var glcanvas; //Our canvas
 //Translation
 var pos = [-2, 5, 5],
   velocity = [0, 0, 0],
-  speed = 1.0;
+  speed = 0.0003;
 
 //Rotation
 var pitchRad = -0.23,
@@ -230,7 +232,7 @@ var oldPitch = 0,
 function redraw(timestamp) {
   timeAvg = Math.max(movingAverage(timeAvg, timestamp - globalTime), 1000); //At least 1 fps
   globalTime = timestamp;
-  
+
   pos[0] += velocity[0] * speed * timeAvg;
   pos[1] += velocity[1] * speed * timeAvg;
   pos[2] += velocity[2] * speed * timeAvg;
@@ -326,7 +328,7 @@ function redraw(timestamp) {
   }
 
   for (var i = 0; i < boneObjects.length; i++) {
-    skelAnim.step(boneObjects[i]);
+    anim.step(boneObjects[i]);
     calculateSkeleton(boneObjects[i]);
   }
 
